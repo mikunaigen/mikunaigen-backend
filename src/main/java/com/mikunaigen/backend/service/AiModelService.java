@@ -35,6 +35,9 @@ public class AiModelService {
     
     @Value("${ai.inference.url}")
     private String hfBaseUrl;
+
+    @Value("${ai.inference.token:}")
+    private String hfToken;
     
     private String getPredictUrl() {
         return hfBaseUrl + "/predict";
@@ -656,7 +659,14 @@ public class AiModelService {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(2500);
         factory.setReadTimeout(7000);
-        return new RestTemplate(factory);
+        RestTemplate template = new RestTemplate(factory);
+        template.getInterceptors().add((request, body, execution) -> {
+            if (hfToken != null && !hfToken.isBlank()) {
+                request.getHeaders().setBearerAuth(hfToken);
+            }
+            return execution.execute(request, body);
+        });
+        return template;
     }
 
     private double factorRentabilidad(Producto p) {

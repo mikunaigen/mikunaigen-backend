@@ -1,27 +1,5 @@
 package com.mikunaigen.backend.service.dashboard;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.mikunaigen.backend.model.nosql.AiModelConfig;
-import com.mikunaigen.backend.model.sql.Inventory;
-import com.mikunaigen.backend.repository.nosql.AiModelConfigRepository;
-import com.mikunaigen.backend.repository.sql.InventoryMovementRepository;
-import com.mikunaigen.backend.repository.sql.InventoryRepository;
-import com.mikunaigen.backend.repository.sql.RestaurantOrderRepository;
-import com.mikunaigen.backend.service.AiModelSlot3GridFsService;
-import com.mikunaigen.backend.service.ContextoInteligenciaService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
-import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestTemplate;
-
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -37,8 +15,34 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.TreeMap;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
+
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mikunaigen.backend.model.nosql.AiModelConfig;
+import com.mikunaigen.backend.model.sql.Inventory;
+import com.mikunaigen.backend.repository.nosql.AiModelConfigRepository;
+import com.mikunaigen.backend.repository.sql.InventoryMovementRepository;
+import com.mikunaigen.backend.repository.sql.InventoryRepository;
+import com.mikunaigen.backend.repository.sql.RestaurantOrderRepository;
+import com.mikunaigen.backend.service.AiModelSlot3GridFsService;
+import com.mikunaigen.backend.service.ContextoInteligenciaService;
+
 @Service
 public class InventoryPredictionService {
+
+    @Value("${ai.inference.token:}")
+    private String hfToken;
 
     private static final Logger log = LoggerFactory.getLogger(InventoryPredictionService.class);
     private static final String CONFIG_ID = "GLOBAL_AI_CONFIG";
@@ -330,6 +334,9 @@ public class InventoryPredictionService {
         String url = hfBaseUrl.endsWith("/") ? hfBaseUrl + "predict-inventory" : hfBaseUrl + "/predict-inventory";
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
+        if (hfToken != null && !hfToken.isBlank()) {
+        headers.setBearerAuth(hfToken);
+        }
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("model_base64", modelB64);
         body.put("model_id", modelId);
