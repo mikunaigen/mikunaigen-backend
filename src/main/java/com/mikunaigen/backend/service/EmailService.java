@@ -92,6 +92,20 @@ public class EmailService {
         );
     }
 
+    public void enviarCorreoTextoPlano(
+            String destino,
+            String asunto,
+            String cuerpo,
+            String emisor,
+            String passwordSmtp,
+            String notifyUserId
+    ) {
+        if (destino == null || destino.isBlank()) {
+            return;
+        }
+        githubEmailDispatchService.enviar(destino, asunto, cuerpo, emisor, passwordSmtp, notifyUserId);
+    }
+
     public ConfiguracionGlobal obtenerConfiguracion() {
         return configRepository.findById(1).orElse(null);
     }

@@ -1,7 +1,7 @@
 package com.mikunaigen.backend.controller;
 
-import com.mikunaigen.backend.model.nosql.ConfiguracionSistema;
-import com.mikunaigen.backend.repository.nosql.ConfiguracionSistemaRepository;
+import com.mikunaigen.backend.model.sql.ConfiguracionGlobal;
+import com.mikunaigen.backend.repository.sql.ConfiguracionGlobalRepository;
 import com.mikunaigen.backend.service.EmailService;
 import com.mikunaigen.backend.service.MaintenanceModeService;
 import org.springframework.http.ResponseEntity;
@@ -10,19 +10,18 @@ import org.springframework.web.bind.annotation.*;
 import java.time.Instant;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 
 @RestController
 @RequestMapping("/api/webhooks")
 public class MaintenanceWebhookController {
 
     private final MaintenanceModeService maintenanceModeService;
-    private final ConfiguracionSistemaRepository configRepository;
+    private final ConfiguracionGlobalRepository configRepository;
     private final EmailService emailService;
 
     public MaintenanceWebhookController(
             MaintenanceModeService maintenanceModeService,
-            ConfiguracionSistemaRepository configRepository,
+            ConfiguracionGlobalRepository configRepository,
             EmailService emailService
     ) {
         this.maintenanceModeService = maintenanceModeService;
@@ -65,22 +64,21 @@ public class MaintenanceWebhookController {
     }
 
     private void enviarNotificacion(String to, String workflowStatus) {
-        ConfiguracionSistema cfg = configRepository.findById("GLOBAL_CONFIG").orElse(null);
+        ConfiguracionGlobal cfg = configRepository.findById(1).orElse(null);
         if (cfg == null) {
             return;
         }
-        String em = cfg.getEmailSmtp();
-        String pw = cfg.getPasswordSmtp();
+        String em = cfg.getSmtpEmail();
+        String pw = cfg.getSmtpContrasenaApp();
         if (em == null || em.isBlank() || pw == null || pw.isBlank()) {
             return;
         }
-        String nb = cfg.getNombreNegocio() != null && !cfg.getNombreNegocio().isBlank()
-                ? cfg.getNombreNegocio().trim()
+        String nb = cfg.getNombrePlataforma() != null && !cfg.getNombrePlataforma().isBlank()
+                ? cfg.getNombrePlataforma().trim()
                 : "Mikunaigen";
         String st = workflowStatus != null ? workflowStatus.trim().toUpperCase(Locale.ROOT) : "UNKNOWN";
         String asunto = "Mantenimiento finalizado — " + nb;
-        String cuerpo = "La restauración de bases de datos finalizó.\n\nEstado: " + st + "\n\nHora: " + Instant.now();
+        String cuerpo = "La restauración de la base de datos finalizó.\n\nEstado: " + st + "\n\nHora: " + Instant.now();
         emailService.enviarCorreoTextoPlano(to, asunto, cuerpo, em, pw, null);
     }
 }
-

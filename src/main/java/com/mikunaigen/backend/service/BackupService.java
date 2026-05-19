@@ -17,6 +17,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -116,26 +117,11 @@ public class BackupService {
         headers.set("Authorization", "Bearer " + githubToken);
         headers.set("Accept", "application/vnd.github.v3+json");
 
-        Map<String, Object> clientPayload = Map.of(
-                "operacion", "generate",
-                "tipo_db", tipo,
-                "clave_respaldo", key,
-                "clave_cifrado", encryptionKey,
-                "pg_host", c.host,
-                "pg_port", String.valueOf(c.port),
-                "pg_name", c.db,
-                "pg_user", pgUser,
-                "pg_pass", pgPassword,
-                "b2_bucket", bucket,
-                "b2_key_id", keyId,
-                "b2_app_key", appKey,
-                "b2_endpoint", endpoint
-        );
+        Map<String, Object> clientPayload = construirPayloadGithub("generate", tipo, key, c);
 
-        Map<String, Object> payload = Map.of(
-                "event_type", "trigger-generate",
-                "client_payload", clientPayload
-        );
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("event_type", "trigger-generate");
+        payload.put("client_payload", clientPayload);
 
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(payload, headers);
         String url = String.format("https://api.github.com/repos/%s/%s/dispatches", githubOwner, githubRepo);
@@ -170,26 +156,11 @@ public class BackupService {
         PgConn c = PgConn.fromJdbc(jdbcUrl);
         String tipo = normalizarDb(db);
 
-        Map<String, Object> clientPayload = Map.of(
-                "operacion", "restore",
-                "tipo_db", tipo,
-                "clave_respaldo", key,
-                "clave_cifrado", encryptionKey,
-                "pg_host", c.host,
-                "pg_port", String.valueOf(c.port),
-                "pg_name", c.db,
-                "pg_user", pgUser,
-                "pg_pass", pgPassword,
-                "b2_bucket", bucket,
-                "b2_key_id", keyId,
-                "b2_app_key", appKey,
-                "b2_endpoint", endpoint
-        );
+        Map<String, Object> clientPayload = construirPayloadGithub("restore", tipo, key, c);
 
-        Map<String, Object> payload = Map.of(
-                "event_type", "trigger-restore",
-                "client_payload", clientPayload
-        );
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("event_type", "trigger-restore");
+        payload.put("client_payload", clientPayload);
 
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(payload, headers);
         String url = String.format("https://api.github.com/repos/%s/%s/dispatches", githubOwner, githubRepo);
@@ -202,6 +173,30 @@ public class BackupService {
 
     private String prefixFor(String db) {
         return "backup_postgresql_";
+    }
+
+    private Map<String, Object> construirPayloadGithub(String operacion, String tipoDb, String claveRespaldo, PgConn c) {
+        Map<String, Object> pg = new HashMap<>();
+        pg.put("host", c.host);
+        pg.put("port", String.valueOf(c.port));
+        pg.put("name", c.db);
+        pg.put("user", pgUser);
+        pg.put("pass", pgPassword);
+
+        Map<String, Object> b2 = new HashMap<>();
+        b2.put("bucket", bucket);
+        b2.put("key_id", keyId);
+        b2.put("app_key", appKey);
+        b2.put("endpoint", endpoint);
+
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("operacion", operacion);
+        payload.put("tipo_db", tipoDb);
+        payload.put("clave_respaldo", claveRespaldo);
+        payload.put("clave_cifrado", encryptionKey);
+        payload.put("pg", pg);
+        payload.put("b2", b2);
+        return payload;
     }
 
     private String normalizarDb(String db) {
