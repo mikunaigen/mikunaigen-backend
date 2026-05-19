@@ -28,7 +28,6 @@ public class AuthController {
     @Autowired private RoleRepository roleRepo;
     @Autowired private VerificationCodeRepository codeRepo;
     @Autowired private IpLoginAttemptRepository ipLoginAttemptRepo;
-    @Autowired private LoginAuditRepository loginAuditRepo;
     @Autowired private EmailService emailService;
     @Autowired private ConfiguracionGlobalRepository configRepo;
     @Autowired private PasswordEncoder passwordEncoder;
@@ -540,12 +539,5 @@ public class AuthController {
             String status,
             String failureReason
     ) {
-        LoginAudit audit = new LoginAudit();
-        audit.setUserEmail(userEmail);
-        audit.setIpAddress(ipAddress);
-        audit.setUserAgent(userAgent != null ? userAgent : "");
-        audit.setStatus(status);
-        audit.setFailureReason(failureReason);
-        loginAuditRepo.save(audit);
     }
 }
