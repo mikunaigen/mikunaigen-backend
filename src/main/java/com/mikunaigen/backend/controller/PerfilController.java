@@ -1,11 +1,9 @@
 package com.mikunaigen.backend.controller;
 
 import com.mikunaigen.backend.model.sql.ConfiguracionGlobal;
-import com.mikunaigen.backend.model.sql.HistorialTelefono;
 import com.mikunaigen.backend.model.sql.User;
 import com.mikunaigen.backend.model.sql.VerificationCode;
 import com.mikunaigen.backend.repository.sql.ConfiguracionGlobalRepository;
-import com.mikunaigen.backend.repository.sql.HistorialTelefonoRepository;
 import com.mikunaigen.backend.repository.sql.UserRepository;
 import com.mikunaigen.backend.repository.sql.VerificationCodeRepository;
 import com.mikunaigen.backend.exception.EmailDispatchException;
@@ -24,20 +22,17 @@ public class PerfilController {
 
     private final UserRepository userRepository;
     private final ConfiguracionGlobalRepository configuracionGlobalRepository;
-    private final HistorialTelefonoRepository historialTelefonoRepository;
     private final VerificationCodeRepository verificationCodeRepository;
     private final EmailService emailService;
 
     public PerfilController(
             UserRepository userRepository,
             ConfiguracionGlobalRepository configuracionGlobalRepository,
-            HistorialTelefonoRepository historialTelefonoRepository,
             VerificationCodeRepository verificationCodeRepository,
             EmailService emailService
     ) {
         this.userRepository = userRepository;
         this.configuracionGlobalRepository = configuracionGlobalRepository;
-        this.historialTelefonoRepository = historialTelefonoRepository;
         this.verificationCodeRepository = verificationCodeRepository;
         this.emailService = emailService;
     }
@@ -60,7 +55,6 @@ public class PerfilController {
 
         String nombres = trimToNull(String.valueOf(body.getOrDefault("nombres", body.getOrDefault("fullName", ""))));
         String apellidos = trimToNull(String.valueOf(body.getOrDefault("apellidos", "")));
-        String phone = trimToNull(String.valueOf(body.getOrDefault("phone", body.getOrDefault("telefono", ""))));
 
         if (nombres == null && body.get("fullName") != null) {
             String full = trimToNull(String.valueOf(body.get("fullName")));
@@ -71,38 +65,35 @@ public class PerfilController {
             }
         }
 
-        if (nombres == null || !nombres.matches("^[A-Za-zÁÉÍÓÚáéíóúÑñÜü\\s]+$")) {
-            return ResponseEntity.badRequest().body(Map.of("message", "Los nombres solo pueden contener letras y tildes."));
+        if (nombres == null || nombres.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Los nombres no pueden estar en blanco."));
         }
-        if (apellidos == null || !apellidos.matches("^[A-Za-zÁÉÍÓÚáéíóúÑñÜü\\s]+$")) {
-            return ResponseEntity.badRequest().body(Map.of("message", "Los apellidos solo pueden contener letras y tildes."));
+        if (apellidos == null || apellidos.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Los apellidos no pueden estar en blanco."));
         }
-        if (phone == null) {
-            return ResponseEntity.badRequest().body(Map.of("message", "El teléfono es obligatorio."));
+        if (nombres.matches(".*\\d.*")) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Los nombres no pueden contener números."));
         }
-        String phoneDigits = phone.replaceAll("\\D", "");
-        if (phoneDigits.length() != 9 || !phoneDigits.startsWith("9")) {
-            return ResponseEntity.badRequest().body(Map.of("message", "El teléfono debe tener 9 dígitos y empezar con 9."));
+        if (apellidos.matches(".*\\d.*")) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Los apellidos no pueden contener números."));
         }
-
-        if (userRepository.existsByTelefonoAndIdNot(phoneDigits, user.getId())) {
-            return ResponseEntity.badRequest().body(Map.of("message", "Ya existe un usuario con ese número de teléfono."));
+        if (!nombres.matches("^[A-Za-zÁÉÍÓÚáéíóúÑñÜü\\s]+$")) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "message", "Los nombres solo pueden contener letras del abecedario español y tildes."));
         }
-
-        boolean telefonoCambio = !phoneDigits.equals(user.getTelefono());
-        if (telefonoCambio) {
-            HistorialTelefono h = new HistorialTelefono();
-            h.setUsuarioId(user.getId());
-            h.setNumeroTelefono(user.getTelefono());
-            historialTelefonoRepository.save(h);
-            user.setTelefono(phoneDigits);
+        if (!apellidos.matches("^[A-Za-zÁÉÍÓÚáéíóúÑñÜü\\s]+$")) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "message", "Los apellidos solo pueden contener letras del abecedario español y tildes."));
         }
 
-        user.setNombres(nombres);
-        user.setApellidos(apellidos);
+        user.setNombres(nombres.trim());
+        user.setApellidos(apellidos.trim());
         user.setActualizadoEn(LocalDateTime.now());
         userRepository.save(user);
-        return ResponseEntity.ok(Map.of("message", "Datos Actualizados Correctamente", "perfil", buildPerfilResponse(user)));
+
+        Map<String, Object> respuesta = buildPerfilResponse(user);
+        respuesta.put("message", "Datos Actualizados Correctamente");
+        return ResponseEntity.ok(respuesta);
     }
 
     @PostMapping("/me/cambiar-password/enviar-codigo")
@@ -150,6 +141,7 @@ public class PerfilController {
         out.put("apellidos", user.getApellidos());
         out.put("fullName", user.getFullName());
         out.put("phone", user.getTelefono());
+        out.put("dni", user.getDni() != null ? user.getDni() : "");
         out.put("email", user.getEmail());
         out.put("role", user.getRole() == null ? null : user.getRole().getName());
         out.put("modoOscuro", user.isModoOscuro());

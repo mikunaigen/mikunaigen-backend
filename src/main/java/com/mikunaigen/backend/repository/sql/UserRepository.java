@@ -15,9 +15,9 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     boolean existsByEmailIgnoreCase(String email);
 
-    default boolean existsByDni(String dni) {
-        return false;
-    }
+    boolean existsByDni(String dni);
+
+    boolean existsByDniAndIdNot(String dni, UUID id);
 
     Optional<User> findByEmail(String email);
 

@@ -31,6 +31,9 @@ public class User {
     @Column(unique = true, nullable = false, length = 9)
     private String telefono;
 
+    @Column(length = 8, unique = true)
+    private String dni;
+
     @Column(name = "telegram_id", unique = true, length = 100)
     private String telegramId;
 
@@ -134,9 +137,6 @@ public class User {
     public void setFirstLogin(boolean firstLogin) {
         this.firstLogin = firstLogin;
     }
-
-    @Transient
-    private String dni;
 
     @Transient
     private String address;
