@@ -74,7 +74,7 @@ public class ConfiguracionController {
                     EmailService.TipoCodigoCorreo.SETUP_SMTP,
                     "Mikunaigen",
                     null);
-            return ResponseEntity.ok(Map.of("message", "Código enviado correctamente a " + email));
+            return ResponseEntity.ok(Map.of("message", "Código enviado a " + email));
         } catch (EmailDispatchException e) {
             return ResponseEntity.internalServerError().body(Map.of(
                     "message",
