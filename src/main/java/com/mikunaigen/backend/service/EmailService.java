@@ -51,29 +51,29 @@ public class EmailService {
         switch (tipo) {
             case SETUP_SMTP -> {
                 subject = "Código de verificación SMTP - " + negocio;
-                body = "Estás validando el correo SMTP de " + negocio + ".\n\n"
+                body = "Ingrese el siguiente código de validación para habilitar el correo SMTP de " + negocio + ".\n\n"
                         + "Código: " + codigo + "\n"
                         + "Este código expira en 2 minutos.";
             }
             case REGISTRO_USUARIO -> {
                 subject = "Código de registro de cuenta - " + negocio;
-                body = "Recibimos una solicitud de registro en " + negocio + ".\n\n"
+                body = "Has solicitud el registro de cuenta en " + negocio + ".\n\n"
                         + "Código de verificación: " + codigo + "\n"
                         + "Este código expira en 2 minutos.\n"
-                        + "Si no realizaste esta acción, ignora este mensaje.";
+                        + "Si no reconoces está acción, ignora el mensaje.";
             }
             case ACTIVACION_EMPLEADO -> {
                 subject = "Código para activar tu cuenta - " + negocio;
-                body = "Tu cuenta requiere activación.\n\n"
+                body = "Ingrese el siguiente código para validar tu cuenta.\n\n"
                         + "Código de activación: " + codigo + "\n"
                         + "Este código expira en 2 minutos.";
             }
             case RECUPERACION_PASSWORD -> {
                 subject = "Código para restablecer contraseña - " + negocio;
-                body = "Recibimos una solicitud para restablecer tu contraseña.\n\n"
-                        + "Código de recuperación: " + codigo + "\n"
+                body = "Has solicituado restablecer tu contraseña.\n\n"
+                        + "Código: " + codigo + "\n"
                         + "Este código expira en 2 minutos.\n"
-                        + "Si no solicitaste este cambio, ignora este correo.";
+                        + "Si no solicitaste este cambio, ignora el mensaje.";
             }
             default -> {
                 subject = "Código de verificación - " + negocio;
