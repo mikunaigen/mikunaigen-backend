@@ -1,5 +1,7 @@
 package com.mikunaigen.backend.service.dashboard;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+
 import com.mikunaigen.backend.model.nosql.AiModelConfig;
 import com.mikunaigen.backend.model.nosql.Producto;
 import com.mikunaigen.backend.model.sql.LoginAudit;
@@ -23,6 +25,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
+@ConditionalOnProperty(name = "app.legacy.restaurante.habilitado", havingValue = "true")
 public class AdminDashboardService {
 
     private static final Logger log = LoggerFactory.getLogger(AdminDashboardService.class);

@@ -1,5 +1,7 @@
 package com.mikunaigen.backend.service;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mikunaigen.backend.model.nosql.DashboardExportJob;
 import org.slf4j.Logger;
@@ -12,6 +14,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 @Service
+@ConditionalOnProperty(name = "app.legacy.restaurante.habilitado", havingValue = "true")
 public class DashboardReportWebhookService {
 
     private static final Logger log = LoggerFactory.getLogger(DashboardReportWebhookService.class);

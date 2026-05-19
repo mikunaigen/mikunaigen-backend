@@ -1,5 +1,7 @@
 package com.mikunaigen.backend.service;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+
 import com.mikunaigen.backend.model.nosql.UserInteraction;
 import com.mikunaigen.backend.model.sql.User;
 import com.mikunaigen.backend.repository.nosql.UserInteractionRepository;
@@ -12,6 +14,7 @@ import java.util.Set;
 import java.util.UUID;
 
 @Service
+@ConditionalOnProperty(name = "app.legacy.restaurante.habilitado", havingValue = "true")
 public class UserInteractionService {
 
     @Autowired

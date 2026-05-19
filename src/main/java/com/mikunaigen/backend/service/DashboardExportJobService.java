@@ -1,5 +1,7 @@
 package com.mikunaigen.backend.service;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mikunaigen.backend.model.nosql.DashboardExportJob;
@@ -12,6 +14,7 @@ import java.util.Map;
 import java.util.UUID;
 
 @Service
+@ConditionalOnProperty(name = "app.legacy.restaurante.habilitado", havingValue = "true")
 public class DashboardExportJobService {
 
     public static final String STATUS_PENDING = "PENDING";

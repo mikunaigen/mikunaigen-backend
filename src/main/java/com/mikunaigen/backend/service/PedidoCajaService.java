@@ -1,5 +1,7 @@
 package com.mikunaigen.backend.service;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+
 import com.mikunaigen.backend.dto.CajaLineaDetalle;
 import com.mikunaigen.backend.dto.CajaOrdenDetalle;
 import com.mikunaigen.backend.dto.CajaOrdenListaItem;
@@ -28,6 +30,7 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
+@ConditionalOnProperty(name = "app.legacy.restaurante.habilitado", havingValue = "true")
 public class PedidoCajaService {
 
     private static final String EST_VALIDANDO = "VALIDANDO_PAGO";

@@ -1,5 +1,7 @@
 package com.mikunaigen.backend.service;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+
 import com.mikunaigen.backend.model.nosql.DatasetExportJob;
 import com.mikunaigen.backend.repository.nosql.DatasetExportJobRepository;
 import org.springframework.stereotype.Service;
@@ -10,6 +12,7 @@ import java.util.Map;
 import java.util.UUID;
 
 @Service
+@ConditionalOnProperty(name = "app.legacy.restaurante.habilitado", havingValue = "true")
 public class AiDatasetJobService {
 
     public static final String STATUS_PENDING = "PENDING";

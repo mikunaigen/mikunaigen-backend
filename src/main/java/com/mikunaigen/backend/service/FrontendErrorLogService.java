@@ -1,5 +1,7 @@
 package com.mikunaigen.backend.service;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+
 import com.mikunaigen.backend.dto.FrontendErrorReportRequest;
 import com.mikunaigen.backend.model.nosql.FrontendErrorLog;
 import com.mikunaigen.backend.repository.nosql.FrontendErrorLogRepository;
@@ -7,6 +9,7 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 @Service
+@ConditionalOnProperty(name = "app.legacy.restaurante.habilitado", havingValue = "true")
 public class FrontendErrorLogService {
 
     private final FrontendErrorLogRepository frontendErrorLogRepository;

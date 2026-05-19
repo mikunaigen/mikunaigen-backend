@@ -4,8 +4,8 @@ import com.mikunaigen.backend.model.sql.*;
 import com.mikunaigen.backend.repository.sql.*;
 import com.mikunaigen.backend.service.EmailService;
 import com.mikunaigen.backend.security.JwtService;
-import com.mikunaigen.backend.model.nosql.ConfiguracionSistema;
-import com.mikunaigen.backend.repository.nosql.ConfiguracionSistemaRepository;
+import com.mikunaigen.backend.model.sql.ConfiguracionGlobal;
+import com.mikunaigen.backend.repository.sql.ConfiguracionGlobalRepository;
 import com.mikunaigen.backend.exception.EmailDispatchException;
 import com.mikunaigen.backend.service.ShoppingCartService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,7 +30,7 @@ public class AuthController {
     @Autowired private IpLoginAttemptRepository ipLoginAttemptRepo;
     @Autowired private LoginAuditRepository loginAuditRepo;
     @Autowired private EmailService emailService;
-    @Autowired private ConfiguracionSistemaRepository configRepo;
+    @Autowired private ConfiguracionGlobalRepository configRepo;
     @Autowired private PasswordEncoder passwordEncoder;
     @Autowired private ShoppingCartService shoppingCartService;
     @Autowired private JwtService jwtService;
@@ -58,8 +58,8 @@ public class AuthController {
         ResponseEntity<?> duplicado = validarDuplicadosPrevioCodigo(email, dni, phone, fullName);
         if (duplicado != null) return duplicado;
         
-        ConfiguracionSistema config = configRepo.findById("GLOBAL_CONFIG").orElse(null);
-        if (config == null) 
+        ConfiguracionGlobal config = configRepo.findById(1).orElse(null);
+        if (config == null || config.getSmtpEmail() == null || config.getSmtpEmail().isBlank())
             return ResponseEntity.badRequest().body(Map.of("message", "El sistema no ha sido configurado aún."));
 
         return generarYEnviarCodigo(email, config, EmailService.TipoCodigoCorreo.REGISTRO_USUARIO);
@@ -117,11 +117,13 @@ public class AuthController {
         user.setFirstLogin(false);
 
         if (userRepo.count() == 0) {
-            user.setRole(roleRepo.findByName("ADMIN").get());
-            user.setFirstLogin(false);
+            user.setRole(roleRepo.findByNombre("administrador").orElseGet(() ->
+                    roleRepo.findByName("ADMIN").orElseThrow()));
+            user.setEstado("activo");
         } else {
-            user.setRole(roleRepo.findByName("CLIENTE").get());
-            user.setFirstLogin(false);
+            user.setRole(roleRepo.findByNombre("estudiante").orElseGet(() ->
+                    roleRepo.findByName("CLIENTE").orElseThrow()));
+            user.setEstado("activo");
         }
 
         userRepo.save(user);
@@ -135,6 +137,7 @@ public class AuthController {
     public ResponseEntity<?> login(@RequestBody Map<String, String> credentials, HttpServletRequest request) {
         String email = credentials.get("email");
         String password = credentials.get("password");
+        boolean soloAdministrador = "true".equalsIgnoreCase(credentials.get("soloAdministrador"));
         String ip = obtenerIpCliente(request);
         String userAgent = request.getHeader("User-Agent");
         String emailAudit = (email == null || email.isBlank()) ? "(sin-email)" : email.trim();
@@ -160,6 +163,12 @@ public class AuthController {
         if (user == null || user.isDeleted()) {
             registrarAuditoriaLogin(emailAudit, ip, userAgent, "FAILED", "Correo no existe");
             return ResponseEntity.status(401).body(Map.of("message", "El correo electrónico no existe."));
+        }
+
+        String rol = user.getRole() != null ? user.getRole().getName() : "";
+        if (soloAdministrador && !"administrador".equalsIgnoreCase(rol) && !"ADMIN".equalsIgnoreCase(rol)) {
+            registrarAuditoriaLogin(emailAudit, ip, userAgent, "FAILED", "Sin rol administrador");
+            return ResponseEntity.status(401).body(Map.of("message", "El correo no tiene rol de administrador."));
         }
 
         if (user.isFirstLogin()) {
@@ -321,7 +330,7 @@ public class AuthController {
         if (user == null || !user.isFirstLogin()) 
             return ResponseEntity.badRequest().body(Map.of("message", "Acción no permitida para este usuario."));
         
-        ConfiguracionSistema config = configRepo.findById("GLOBAL_CONFIG").orElse(null);
+        ConfiguracionGlobal config = configRepo.findById(1).orElse(null);
         if (config == null) return ResponseEntity.internalServerError().body(Map.of("message", "El sistema no está configurado."));
 
         return generarYEnviarCodigo(email, config, EmailService.TipoCodigoCorreo.ACTIVACION_EMPLEADO);
@@ -359,7 +368,7 @@ public class AuthController {
         String email = request.get("email");
         if (!userRepo.existsByEmail(email)) return ResponseEntity.badRequest().body(Map.of("message", "Correo no registrado."));
         
-        ConfiguracionSistema config = configRepo.findById("GLOBAL_CONFIG").orElse(null);
+        ConfiguracionGlobal config = configRepo.findById(1).orElse(null);
         if (config == null) return ResponseEntity.internalServerError().body(Map.of("message", "El sistema no está configurado."));
 
         return generarYEnviarCodigo(email, config, EmailService.TipoCodigoCorreo.RECUPERACION_PASSWORD);
@@ -389,24 +398,25 @@ public class AuthController {
 
     private ResponseEntity<?> generarYEnviarCodigo(
             String email,
-            ConfiguracionSistema config,
+            ConfiguracionGlobal config,
             EmailService.TipoCodigoCorreo tipo
     ) {
         String code = String.format("%06d", new Random().nextInt(999999));
         VerificationCode vCode = new VerificationCode();
-        vCode.setEmail(email);
-        vCode.setCode(code);
-        vCode.setExpirationTime(LocalDateTime.now().plusMinutes(1));
+        vCode.setReferencia(email);
+        vCode.setCodigo(code);
+        vCode.setProposito(mapPropositoCodigo(tipo));
+        vCode.setExpirationTime(LocalDateTime.now().plusMinutes(2));
         codeRepo.save(vCode);
 
         try {
             emailService.enviarCodigoVerificacion(
                     email,
                     code,
-                    config.getEmailSmtp(),
-                    config.getPasswordSmtp(),
+                    config.getSmtpEmail(),
+                    config.getSmtpContrasenaApp(),
                     tipo,
-                    config.getNombreNegocio(),
+                    config.getNombrePlataforma(),
                     null
             );
             return ResponseEntity.ok(Map.of("message", "Código enviado al correo."));
@@ -499,6 +509,15 @@ public class AuthController {
         intentoIp.setLastFailedAt(null);
         intentoIp.setBlockedUntil(null);
         ipLoginAttemptRepo.save(intentoIp);
+    }
+
+    private static String mapPropositoCodigo(EmailService.TipoCodigoCorreo tipo) {
+        return switch (tipo) {
+            case RECUPERACION_PASSWORD -> "recuperacion";
+            case REGISTRO_USUARIO -> "registro_telegram";
+            case SETUP_SMTP -> "smtp_test";
+            default -> "recuperacion";
+        };
     }
 
     private void registrarAuditoriaLogin(

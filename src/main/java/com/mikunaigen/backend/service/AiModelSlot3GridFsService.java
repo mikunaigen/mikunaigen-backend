@@ -1,5 +1,7 @@
 package com.mikunaigen.backend.service;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+
 import com.mongodb.client.gridfs.model.GridFSFile;
 import org.bson.Document;
 import org.bson.types.ObjectId;
@@ -17,6 +19,7 @@ import java.io.InputStream;
 import java.util.Base64;
 
 @Service
+@ConditionalOnProperty(name = "app.legacy.restaurante.habilitado", havingValue = "true")
 public class AiModelSlot3GridFsService {
 
     private static final Logger log = LoggerFactory.getLogger(AiModelSlot3GridFsService.class);

@@ -10,5 +10,15 @@ public class Role {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
-    private String name;
+
+    @Column(nullable = false, unique = true, length = 50)
+    private String nombre;
+
+    public String getName() {
+        return nombre;
+    }
+
+    public void setName(String name) {
+        this.nombre = name;
+    }
 }

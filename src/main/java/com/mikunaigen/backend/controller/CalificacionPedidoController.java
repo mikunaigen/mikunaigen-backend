@@ -1,5 +1,7 @@
 package com.mikunaigen.backend.controller;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+
 import com.mikunaigen.backend.dto.CalificacionPedidoRequest;
 import com.mikunaigen.backend.service.CalificacionPedidoService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,6 +14,7 @@ import java.util.UUID;
 
 
 @RestController
+@ConditionalOnProperty(name = "app.legacy.restaurante.habilitado", havingValue = "true")
 @RequestMapping("/api/pedidos/calificacion")
 public class CalificacionPedidoController {
 

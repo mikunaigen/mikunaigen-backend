@@ -1,5 +1,7 @@
 package com.mikunaigen.backend.controller;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+
 import com.mikunaigen.backend.dto.CajaOrdenDetalle;
 import com.mikunaigen.backend.dto.CajaOrdenListaItem;
 import com.mikunaigen.backend.service.PedidoCajaService;
@@ -14,6 +16,7 @@ import java.util.UUID;
 
 
 @RestController
+@ConditionalOnProperty(name = "app.legacy.restaurante.habilitado", havingValue = "true")
 @RequestMapping("/api/pedidos/caja")
 public class PedidoCajaController {
 

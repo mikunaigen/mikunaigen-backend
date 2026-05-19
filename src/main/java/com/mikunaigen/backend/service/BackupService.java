@@ -2,16 +2,16 @@ package com.mikunaigen.backend.service;
 
 import com.mikunaigen.backend.dto.BackupItemDto;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
 import software.amazon.awssdk.services.s3.model.S3Object;
-import org.springframework.web.client.RestTemplate;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpEntity;
-import java.util.Map;
+
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -19,11 +19,13 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 @Service
 public class BackupService {
 
     private static final DateTimeFormatter TS = DateTimeFormatter.ofPattern("yyyyMMdd_HHmm", Locale.ROOT);
+    private static final String DB_TIPO = "postgresql";
 
     private final S3Client s3;
 
@@ -50,9 +52,6 @@ public class BackupService {
 
     @Value("${spring.datasource.password}")
     private String pgPassword;
-
-    @Value("${spring.data.mongodb.uri}")
-    private String mongoUri;
 
     @Value("${app.github.token:}")
     private String githubToken;
@@ -91,68 +90,53 @@ public class BackupService {
     }
 
     public void generatePairedBackups() {
-        String timestamp = TS.format(LocalDateTime.now());
-        generateWithTimestamp("postgresql", timestamp);
-        generateWithTimestamp("mongodb", timestamp);
+        generate(DB_TIPO);
     }
 
-    public java.util.Map<String, String> generatePairedBackupKeys() {
-        String timestamp = TS.format(LocalDateTime.now());
-        String pg = generateWithTimestamp("postgresql", timestamp).key();
-        String mg = generateWithTimestamp("mongodb", timestamp).key();
-        return java.util.Map.of("postgresKey", pg, "mongoKey", mg);
+    public Map<String, String> generatePairedBackupKeys() {
+        String key = generateWithTimestamp(DB_TIPO, TS.format(LocalDateTime.now())).key();
+        return Map.of("postgresKey", key);
     }
 
     public BackupItemDto generate(String db) {
-        return generateWithTimestamp(db, TS.format(LocalDateTime.now()));
+        return generateWithTimestamp(normalizarDb(db), TS.format(LocalDateTime.now()));
     }
 
     public BackupItemDto generateWithTimestamp(String db, String timestamp) {
-        if (!isPostgres(db) && !isMongo(db)) {
-            throw new IllegalArgumentException("DB inválida.");
-        }
+        String tipo = normalizarDb(db);
         if (githubToken == null || githubToken.isBlank() || githubOwner.isBlank() || githubRepo.isBlank()) {
             throw new IllegalArgumentException("Credenciales de GitHub no configuradas en el servidor.");
         }
 
         PgConn c = PgConn.fromJdbc(jdbcUrl);
-        String extension = isMongo(db) ? ".archive.gz.enc" : ".dump.enc";
-        String key = prefixFor(db) + timestamp + extension;
+        String key = prefixFor(tipo) + timestamp + ".dump.enc";
 
         RestTemplate restTemplate = new RestTemplate();
         HttpHeaders headers = new HttpHeaders();
         headers.set("Authorization", "Bearer " + githubToken);
         headers.set("Accept", "application/vnd.github.v3+json");
 
-        Map<String, Object> b2 = new java.util.HashMap<>();
-        b2.put("bucket", bucket);
-        b2.put("key_id", keyId);
-        b2.put("app_key", appKey);
-        b2.put("endpoint", endpoint);
-
-        Map<String, Object> dbPayload = new java.util.HashMap<>();
-        Map<String, Object> pg = new java.util.HashMap<>();
-        pg.put("host", c.host);
-        pg.put("port", String.valueOf(c.port));
-        pg.put("name", c.db);
-        pg.put("user", pgUser);
-        pg.put("pass", pgPassword);
-        dbPayload.put("pg", pg);
-        dbPayload.put("mongo_uri", mongoUri);
-
-        Map<String, Object> clientPayload = new java.util.HashMap<>();
-        clientPayload.put("operation", "generate");
-        clientPayload.put("db_type", db);
-        clientPayload.put("backup_key", key);
-        clientPayload.put("encryption_key", encryptionKey);
-        clientPayload.put("b2", b2);
-        clientPayload.put("db", dbPayload);
+        Map<String, Object> clientPayload = Map.of(
+                "operacion", "generate",
+                "tipo_db", tipo,
+                "clave_respaldo", key,
+                "clave_cifrado", encryptionKey,
+                "pg_host", c.host,
+                "pg_port", String.valueOf(c.port),
+                "pg_name", c.db,
+                "pg_user", pgUser,
+                "pg_pass", pgPassword,
+                "b2_bucket", bucket,
+                "b2_key_id", keyId,
+                "b2_app_key", appKey,
+                "b2_endpoint", endpoint
+        );
 
         Map<String, Object> payload = Map.of(
                 "event_type", "trigger-generate",
                 "client_payload", clientPayload
         );
-        
+
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(payload, headers);
         String url = String.format("https://api.github.com/repos/%s/%s/dispatches", githubOwner, githubRepo);
         try {
@@ -174,7 +158,6 @@ public class BackupService {
         if (key == null || key.isBlank()) {
             throw new IllegalArgumentException("Key requerida.");
         }
-        
         if (githubToken == null || githubToken.isBlank() || githubOwner.isBlank() || githubRepo.isBlank()) {
             throw new IllegalArgumentException("Credenciales de GitHub no configuradas en el servidor.");
         }
@@ -185,38 +168,31 @@ public class BackupService {
         headers.set("Accept", "application/vnd.github.v3+json");
 
         PgConn c = PgConn.fromJdbc(jdbcUrl);
-        Map<String, Object> b2 = new java.util.HashMap<>();
-        b2.put("bucket", bucket);
-        b2.put("key_id", keyId);
-        b2.put("app_key", appKey);
-        b2.put("endpoint", endpoint);
+        String tipo = normalizarDb(db);
 
-        Map<String, Object> dbPayload = new java.util.HashMap<>();
-        Map<String, Object> pg = new java.util.HashMap<>();
-        pg.put("host", c.host);
-        pg.put("port", String.valueOf(c.port));
-        pg.put("name", c.db);
-        pg.put("user", pgUser);
-        pg.put("pass", pgPassword);
-        dbPayload.put("pg", pg);
-        dbPayload.put("mongo_uri", mongoUri);
-
-        Map<String, Object> clientPayload = new java.util.HashMap<>();
-        clientPayload.put("operation", "restore");
-        clientPayload.put("db_type", db);
-        clientPayload.put("backup_key", key);
-        clientPayload.put("encryption_key", encryptionKey);
-        clientPayload.put("b2", b2);
-        clientPayload.put("db", dbPayload);
+        Map<String, Object> clientPayload = Map.of(
+                "operacion", "restore",
+                "tipo_db", tipo,
+                "clave_respaldo", key,
+                "clave_cifrado", encryptionKey,
+                "pg_host", c.host,
+                "pg_port", String.valueOf(c.port),
+                "pg_name", c.db,
+                "pg_user", pgUser,
+                "pg_pass", pgPassword,
+                "b2_bucket", bucket,
+                "b2_key_id", keyId,
+                "b2_app_key", appKey,
+                "b2_endpoint", endpoint
+        );
 
         Map<String, Object> payload = Map.of(
-            "event_type", "trigger-restore",
-            "client_payload", clientPayload
+                "event_type", "trigger-restore",
+                "client_payload", clientPayload
         );
 
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(payload, headers);
         String url = String.format("https://api.github.com/repos/%s/%s/dispatches", githubOwner, githubRepo);
-
         try {
             restTemplate.postForEntity(url, request, String.class);
         } catch (Exception e) {
@@ -225,17 +201,17 @@ public class BackupService {
     }
 
     private String prefixFor(String db) {
-        if (isPostgres(db)) return "backup_postgresql_";
-        if (isMongo(db)) return "backup_mongodb_";
-        throw new IllegalArgumentException("DB inválida.");
+        return "backup_postgresql_";
     }
 
-    private boolean isPostgres(String db) {
-        return db != null && (db.equalsIgnoreCase("postgresql") || db.equalsIgnoreCase("postgres"));
-    }
-
-    private boolean isMongo(String db) {
-        return db != null && db.equalsIgnoreCase("mongodb");
+    private String normalizarDb(String db) {
+        if (db == null || db.isBlank()) {
+            return DB_TIPO;
+        }
+        if (db.equalsIgnoreCase("postgres")) {
+            return DB_TIPO;
+        }
+        return db.toLowerCase(Locale.ROOT);
     }
 
     private static final class PgConn {
@@ -256,14 +232,14 @@ public class BackupService {
                 throw new IllegalArgumentException("JDBC inválido.");
             }
             s = s.substring("postgresql://".length());
-            String hostPort;
-            String dbPart;
             int slash = s.indexOf('/');
-            hostPort = slash >= 0 ? s.substring(0, slash) : s;
-            dbPart = slash >= 0 ? s.substring(slash + 1) : "";
+            String hostPort = slash >= 0 ? s.substring(0, slash) : s;
+            String dbPart = slash >= 0 ? s.substring(slash + 1) : "";
             String db = dbPart;
             int q = db.indexOf('?');
-            if (q >= 0) db = db.substring(0, q);
+            if (q >= 0) {
+                db = db.substring(0, q);
+            }
             String host = hostPort;
             int port = 5432;
             int colon = hostPort.lastIndexOf(':');
@@ -277,6 +253,4 @@ public class BackupService {
             return new PgConn(host, port, db.isBlank() ? "postgres" : db);
         }
     }
-
 }
-

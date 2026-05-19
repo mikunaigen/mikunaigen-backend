@@ -1,5 +1,7 @@
 package com.mikunaigen.backend.service;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+
 import com.mikunaigen.backend.dto.CajaLineaDetalle;
 import com.mikunaigen.backend.dto.SeguimientoPedidoListasResponse;
 import com.mikunaigen.backend.dto.SeguimientoPedidoResponse;
@@ -27,6 +29,7 @@ import java.util.Set;
 import java.util.UUID;
 
 @Service
+@ConditionalOnProperty(name = "app.legacy.restaurante.habilitado", havingValue = "true")
 public class SeguimientoPedidoService {
 
     private static final List<String> FINALIZADOS = List.of("ENTREGADO", "CANCELADO");

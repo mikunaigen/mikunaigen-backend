@@ -1,5 +1,7 @@
 package com.mikunaigen.backend.service.dashboard;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -39,6 +41,7 @@ import com.mikunaigen.backend.service.AiModelSlot3GridFsService;
 import com.mikunaigen.backend.service.ContextoInteligenciaService;
 
 @Service
+@ConditionalOnProperty(name = "app.legacy.restaurante.habilitado", havingValue = "true")
 public class InventoryPredictionService {
 
     @Value("${ai.inference.token:}")

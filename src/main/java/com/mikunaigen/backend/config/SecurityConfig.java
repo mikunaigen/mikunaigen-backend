@@ -54,7 +54,7 @@ public class SecurityConfig {
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .exceptionHandling(ex -> ex.authenticationEntryPoint((req, res, e) -> res.sendError(HttpStatus.UNAUTHORIZED.value())))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/ws-restaiurante/**").permitAll()
+                .requestMatchers("/ws-mikunaigen/**").permitAll()
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 .requestMatchers(
                         "/api/ping",
@@ -81,8 +81,8 @@ public class SecurityConfig {
                         "/api/webhooks/maintenance-end",
                         "/api/webhooks/maintenance-status"
                 ).permitAll()
-                .requestMatchers("/api/auth/crear-empleado").hasRole("ADMIN")
-                .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                .requestMatchers("/api/auth/crear-empleado").hasRole("administrador")
+                .requestMatchers("/api/admin/**").hasRole("administrador")
                 .requestMatchers("/api/**").authenticated()
                 .anyRequest().permitAll()
             )

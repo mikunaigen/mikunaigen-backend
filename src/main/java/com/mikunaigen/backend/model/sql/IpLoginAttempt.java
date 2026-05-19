@@ -7,25 +7,30 @@ import java.time.LocalDateTime;
 
 @Data
 @Entity
-@Table(name = "ip_login_attempts")
+@Table(name = "bloqueos_ip")
 public class IpLoginAttempt {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
 
-    @Column(name = "ip_address", unique = true, nullable = false, length = 45)
+    @Column(name = "direccion_ip", unique = true, nullable = false, length = 45)
     private String ipAddress;
 
-    @Column(name = "failed_attempts")
+    @Column(name = "intentos_fallidos")
     private Integer failedAttempts = 0;
 
-    @Column(name = "last_failed_at")
-    private LocalDateTime lastFailedAt;
-
-    @Column(name = "blocked_until")
+    @Column(name = "bloqueado_hasta")
     private LocalDateTime blockedUntil;
 
-    @Column(name = "created_at")
-    private LocalDateTime createdAt = LocalDateTime.now();
-}
+    @Column(name = "ultimo_intento")
+    private LocalDateTime lastFailedAt = LocalDateTime.now();
 
+    public LocalDateTime getCreatedAt() {
+        return lastFailedAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.lastFailedAt = createdAt;
+    }
+}

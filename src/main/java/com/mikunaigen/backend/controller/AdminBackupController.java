@@ -52,12 +52,12 @@ public class AdminBackupController {
         String mgKey = body != null && body.get("mongoKey") != null ? String.valueOf(body.get("mongoKey")) : null;
         boolean notify = body != null && Boolean.TRUE.equals(body.get("notifyWhenDone"));
         String notifyEmail = body != null && body.get("notifyEmail") != null ? String.valueOf(body.get("notifyEmail")) : null;
-        if (pgKey == null || pgKey.isBlank() || mgKey == null || mgKey.isBlank()) {
-            return ResponseEntity.badRequest().body(Map.of("ok", false, "message", "Keys requeridas."));
+        String key = pgKey != null && !pgKey.isBlank() ? pgKey : mgKey;
+        if (key == null || key.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("ok", false, "message", "Key de respaldo requerida."));
         }
-        maintenanceModeService.startRestore(notify, notifyEmail, Set.of("postgresql", "mongodb"));
-        backupService.restore("postgresql", pgKey);
-        backupService.restore("mongodb", mgKey);
+        maintenanceModeService.startRestore(notify, notifyEmail, Set.of("postgresql"));
+        backupService.restore("postgresql", key);
         return ResponseEntity.ok(Map.of("ok", true));
     }
 

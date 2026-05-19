@@ -1,5 +1,7 @@
 package com.mikunaigen.backend.controller;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+
 import com.mikunaigen.backend.service.AiDatasetDispatchService;
 import com.mikunaigen.backend.service.AiDatasetJobService;
 import com.mikunaigen.backend.service.AiModelService;
@@ -14,6 +16,7 @@ import java.util.Map;
 
 
 @RestController
+@ConditionalOnProperty(name = "app.legacy.restaurante.habilitado", havingValue = "true")
 @RequestMapping("/api/ia-modelos")
 public class AiModelController {
 

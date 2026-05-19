@@ -1,5 +1,7 @@
 package com.mikunaigen.backend.service;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+
 import com.mikunaigen.backend.dto.DashboardExportRequest;
 import com.mikunaigen.backend.model.nosql.DashboardExportJob;
 import com.mikunaigen.backend.model.sql.User;
@@ -19,6 +21,7 @@ import java.util.Map;
 import java.util.UUID;
 
 @Service
+@ConditionalOnProperty(name = "app.legacy.restaurante.habilitado", havingValue = "true")
 public class DashboardReportDispatchService {
 
     private static final DateTimeFormatter TS = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss", Locale.ROOT);

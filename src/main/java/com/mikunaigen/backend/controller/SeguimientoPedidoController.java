@@ -1,5 +1,7 @@
 package com.mikunaigen.backend.controller;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+
 import com.mikunaigen.backend.dto.SeguimientoPedidoListasResponse;
 import com.mikunaigen.backend.dto.SeguimientoPedidoResponse;
 import com.mikunaigen.backend.service.SeguimientoPedidoService;
@@ -13,6 +15,7 @@ import java.util.UUID;
 
 
 @RestController
+@ConditionalOnProperty(name = "app.legacy.restaurante.habilitado", havingValue = "true")
 @RequestMapping("/api/pedidos/seguimiento")
 public class SeguimientoPedidoController {
 

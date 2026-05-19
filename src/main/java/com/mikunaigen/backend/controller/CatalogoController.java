@@ -16,6 +16,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -30,6 +31,7 @@ import java.util.Set;
 
 
 @RestController
+@ConditionalOnProperty(name = "app.legacy.restaurante.habilitado", havingValue = "true")
 @RequestMapping("/api/catalogo")
 public class CatalogoController {
 

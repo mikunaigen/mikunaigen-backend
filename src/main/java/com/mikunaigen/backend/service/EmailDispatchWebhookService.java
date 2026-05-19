@@ -1,5 +1,7 @@
 package com.mikunaigen.backend.service;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mikunaigen.backend.repository.nosql.ConfiguracionSistemaRepository;
 import com.mikunaigen.backend.repository.nosql.EmailDispatchLogRepository;
@@ -17,6 +19,7 @@ import java.util.Map;
 import java.util.Optional;
 
 @Service
+@ConditionalOnProperty(name = "app.legacy.restaurante.habilitado", havingValue = "true")
 public class EmailDispatchWebhookService {
 
     private static final Logger log = LoggerFactory.getLogger(EmailDispatchWebhookService.class);

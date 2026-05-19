@@ -1,5 +1,7 @@
 package com.mikunaigen.backend.controller;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+
 import com.mikunaigen.backend.dto.FrontendErrorReportRequest;
 import com.mikunaigen.backend.service.FrontendErrorLogService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -9,6 +11,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.Map;
 
 @RestController
+@ConditionalOnProperty(name = "app.legacy.restaurante.habilitado", havingValue = "true")
 @RequestMapping("/api/client-errors")
 public class FrontendErrorLogController {
 

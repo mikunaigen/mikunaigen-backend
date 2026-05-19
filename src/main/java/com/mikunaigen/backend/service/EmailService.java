@@ -1,8 +1,8 @@
 package com.mikunaigen.backend.service;
 
-import com.mikunaigen.backend.model.nosql.ConfiguracionSistema;
+import com.mikunaigen.backend.model.sql.ConfiguracionGlobal;
 import com.mikunaigen.backend.model.sql.User;
-import com.mikunaigen.backend.repository.nosql.ConfiguracionSistemaRepository;
+import com.mikunaigen.backend.repository.sql.ConfiguracionGlobalRepository;
 import com.mikunaigen.backend.repository.sql.UserRepository;
 import org.springframework.stereotype.Service;
 
@@ -17,12 +17,12 @@ public class EmailService {
     }
 
     private final GithubEmailDispatchService githubEmailDispatchService;
-    private final ConfiguracionSistemaRepository configRepository;
+    private final ConfiguracionGlobalRepository configRepository;
     private final UserRepository userRepository;
 
     public EmailService(
             GithubEmailDispatchService githubEmailDispatchService,
-            ConfiguracionSistemaRepository configRepository,
+            ConfiguracionGlobalRepository configRepository,
             UserRepository userRepository) {
         this.githubEmailDispatchService = githubEmailDispatchService;
         this.configRepository = configRepository;
@@ -53,88 +53,64 @@ public class EmailService {
                 subject = "Código de verificación SMTP - " + negocio;
                 body = "Estás validando el correo SMTP de " + negocio + ".\n\n"
                         + "Código: " + codigo + "\n"
-                        + "Este código expira en 1 minuto.";
+                        + "Este código expira en 2 minutos.";
             }
             case REGISTRO_USUARIO -> {
                 subject = "Código de registro de cuenta - " + negocio;
                 body = "Recibimos una solicitud de registro en " + negocio + ".\n\n"
                         + "Código de verificación: " + codigo + "\n"
-                        + "Este código expira en 1 minuto.\n"
+                        + "Este código expira en 2 minutos.\n"
                         + "Si no realizaste esta acción, ignora este mensaje.";
             }
             case ACTIVACION_EMPLEADO -> {
-                subject = "Código para activar tu cuenta de personal - " + negocio;
-                body = "Tu cuenta de personal fue creada y requiere activación.\n\n"
+                subject = "Código para activar tu cuenta - " + negocio;
+                body = "Tu cuenta requiere activación.\n\n"
                         + "Código de activación: " + codigo + "\n"
-                        + "Este código expira en 1 minuto.";
+                        + "Este código expira en 2 minutos.";
             }
             case RECUPERACION_PASSWORD -> {
                 subject = "Código para restablecer contraseña - " + negocio;
                 body = "Recibimos una solicitud para restablecer tu contraseña.\n\n"
                         + "Código de recuperación: " + codigo + "\n"
-                        + "Este código expira en 1 minuto.\n"
+                        + "Este código expira en 2 minutos.\n"
                         + "Si no solicitaste este cambio, ignora este correo.";
             }
             default -> {
                 subject = "Código de verificación - " + negocio;
                 body = "Tu código de verificación es: " + codigo
-                        + "\nEste código expira en 1 minuto.";
+                        + "\nEste código expira en 2 minutos.";
             }
         }
 
-        githubEmailDispatchService.dispatchPlainEmail(
+        githubEmailDispatchService.enviar(
                 destino,
-                emisor,
-                passwordSmtp,
                 subject,
                 body,
+                emisor,
+                passwordSmtp,
                 notifyUserId
         );
     }
 
-    public void enviarCorreoTextoPlano(
-            String destino,
-            String asunto,
-            String cuerpo,
-            String emisor,
-            String passwordSmtp,
-            String notifyUserId
-    ) {
-        if (destino == null || destino.isBlank() || emisor == null || emisor.isBlank()
-                || passwordSmtp == null || passwordSmtp.isBlank()) {
-            return;
-        }
-        if (usuarioRebotado(destino)) {
-            return;
-        }
-        ConfiguracionSistema cfg = configRepository.findById("GLOBAL_CONFIG").orElse(null);
-        if (cfg != null && cfg.isSmtpCredentialsInvalid()) {
-            return;
-        }
-
-        githubEmailDispatchService.dispatchPlainEmail(
-                destino,
-                emisor,
-                passwordSmtp,
-                asunto,
-                cuerpo,
-                notifyUserId
-        );
+    public ConfiguracionGlobal obtenerConfiguracion() {
+        return configRepository.findById(1).orElse(null);
     }
 
     private void assertSmtpConfigPermiteEnvio(TipoCodigoCorreo tipo) {
         if (tipo == TipoCodigoCorreo.SETUP_SMTP) {
             return;
         }
-        ConfiguracionSistema c = configRepository.findById("GLOBAL_CONFIG").orElse(null);
-        if (c != null && c.isSmtpCredentialsInvalid()) {
-            throw new IllegalStateException("Correo del sistema no disponible. Revisa la configuración SMTP.");
+        ConfiguracionGlobal config = obtenerConfiguracion();
+        if (config == null || config.getSmtpEmail() == null || config.getSmtpEmail().isBlank()) {
+            throw new IllegalStateException("SMTP no configurado.");
+        }
+        if (!"activo".equalsIgnoreCase(config.getSmtpEstado())) {
+            throw new IllegalStateException("SMTP inactivo.");
         }
     }
 
     private boolean usuarioRebotado(String email) {
-        return userRepository.findByEmailIgnoreCase(email.trim())
-                .map(User::isEmailBounced)
-                .orElse(false);
+        User u = userRepository.findByEmailIgnoreCase(email).orElse(null);
+        return u != null && "suspendido".equalsIgnoreCase(u.getEstado());
     }
 }

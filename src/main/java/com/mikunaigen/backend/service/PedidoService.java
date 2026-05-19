@@ -1,5 +1,7 @@
 package com.mikunaigen.backend.service;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+
 import com.mikunaigen.backend.model.nosql.CartItemMongo;
 import com.mikunaigen.backend.model.nosql.Producto;
 import com.mikunaigen.backend.model.nosql.ShoppingCart;
@@ -22,6 +24,7 @@ import java.math.RoundingMode;
 import java.util.*;
 
 @Service
+@ConditionalOnProperty(name = "app.legacy.restaurante.habilitado", havingValue = "true")
 public class PedidoService {
 
     private static final long MAX_BYTES_COMPROBANTE = 3L * 1024 * 1024;

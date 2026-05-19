@@ -1,5 +1,7 @@
 package com.mikunaigen.backend.controller;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+
 import com.mikunaigen.backend.dto.RepartidorOrdenCard;
 import com.mikunaigen.backend.dto.RepartidorOrdenDetalle;
 import com.mikunaigen.backend.service.PedidoRepartidorService;
@@ -16,6 +18,7 @@ import java.util.UUID;
 
 
 @RestController
+@ConditionalOnProperty(name = "app.legacy.restaurante.habilitado", havingValue = "true")
 @RequestMapping("/api/pedidos/repartidor")
 public class PedidoRepartidorController {
 

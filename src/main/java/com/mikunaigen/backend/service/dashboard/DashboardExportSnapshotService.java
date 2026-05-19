@@ -1,5 +1,7 @@
 package com.mikunaigen.backend.service.dashboard;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+
 import com.mikunaigen.backend.model.nosql.ConfiguracionSistema;
 import com.mikunaigen.backend.model.nosql.DashboardExportJob;
 import com.mikunaigen.backend.repository.nosql.ConfiguracionSistemaRepository;
@@ -14,6 +16,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 @Service
+@ConditionalOnProperty(name = "app.legacy.restaurante.habilitado", havingValue = "true")
 public class DashboardExportSnapshotService {
 
     private static final DateTimeFormatter GEN_FMT = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss", Locale.forLanguageTag("es-PE"));

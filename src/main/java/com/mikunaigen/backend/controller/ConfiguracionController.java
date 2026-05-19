@@ -1,84 +1,47 @@
 package com.mikunaigen.backend.controller;
 
-import com.mikunaigen.backend.model.nosql.ConfiguracionSistema;
-import com.mikunaigen.backend.model.sql.VerificationCode;
-import com.mikunaigen.backend.repository.nosql.ConfiguracionSistemaRepository;
-import com.mikunaigen.backend.repository.sql.VerificationCodeRepository;
 import com.mikunaigen.backend.exception.EmailDispatchException;
+import com.mikunaigen.backend.model.sql.ConfiguracionGlobal;
+import com.mikunaigen.backend.model.sql.VerificationCode;
+import com.mikunaigen.backend.repository.sql.ConfiguracionGlobalRepository;
+import com.mikunaigen.backend.repository.sql.VerificationCodeRepository;
 import com.mikunaigen.backend.service.EmailService;
+import com.mikunaigen.backend.util.ConfiguracionPlataformaMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
-import java.util.HashMap;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Random;
 
-
 @RestController
 @RequestMapping("/api/configuracion")
 public class ConfiguracionController {
 
-    @Autowired private ConfiguracionSistemaRepository configNoSqlRepo;
-    @Autowired private VerificationCodeRepository codeSqlRepo;
-    @Autowired private EmailService emailService;
+    @Autowired
+    private ConfiguracionGlobalRepository configRepo;
+
+    @Autowired
+    private VerificationCodeRepository codeSqlRepo;
+
+    @Autowired
+    private EmailService emailService;
 
     @GetMapping("/estado")
     public ResponseEntity<Map<String, Boolean>> estadoConfiguracion() {
-        boolean completa = configNoSqlRepo.findById("GLOBAL_CONFIG")
-                .map(ConfiguracionSistema::isConfiguracionCompleta)
+        boolean completa = configRepo.findById(1)
+                .map(ConfiguracionGlobal::isConfiguracionCompleta)
                 .orElse(false);
         return ResponseEntity.ok(Map.of("configuracionCompleta", completa));
     }
 
     @GetMapping
     public ResponseEntity<Map<String, Object>> obtenerConfiguracion() {
-        Optional<ConfiguracionSistema> opt = configNoSqlRepo.findById("GLOBAL_CONFIG");
-        if (opt.isEmpty()) {
-            Map<String, Object> vacia = new HashMap<>();
-            vacia.put("configuracionCompleta", false);
-            vacia.put("emailSmtp", "");
-            vacia.put("smtpPasswordConfigured", false);
-            vacia.put("smtpCredentialsInvalid", false);
-            vacia.put("nombreNegocio", "");
-            vacia.put("telefonoNegocio", "");
-            vacia.put("terminosCondiciones", "");
-            vacia.put("logoBase64", "");
-            vacia.put("mediosPago", Map.of(
-                    "yapeActivo", false,
-                    "yapeTelefono", "",
-                    "plinActivo", false,
-                    "plinTelefono", "",
-                    "transferenciaActiva", false,
-                    "transferencias", List.of()
-            ));
-            return ResponseEntity.ok(vacia);
-        }
-        ConfiguracionSistema c = opt.get();
-        ConfiguracionSistema.MediosPago mp = c.getMediosPago() != null ? c.getMediosPago() : new ConfiguracionSistema.MediosPago();
-        Map<String, Object> m = new HashMap<>();
-        m.put("configuracionCompleta", c.isConfiguracionCompleta());
-        m.put("emailSmtp", c.getEmailSmtp() != null ? c.getEmailSmtp() : "");
-        m.put("smtpPasswordConfigured", c.getPasswordSmtp() != null && !c.getPasswordSmtp().isBlank());
-        m.put("smtpCredentialsInvalid", c.isSmtpCredentialsInvalid());
-        m.put("nombreNegocio", c.getNombreNegocio() != null ? c.getNombreNegocio() : "");
-        m.put("telefonoNegocio", c.getTelefonoNegocio() != null ? c.getTelefonoNegocio() : "");
-        m.put("terminosCondiciones", c.getTerminosCondiciones() != null ? c.getTerminosCondiciones() : "");
-        m.put("logoBase64", c.getLogoBase64() != null ? c.getLogoBase64() : "");
-        m.put("mediosPago", Map.of(
-                "yapeActivo", mp.isYapeActivo(),
-                "yapeTelefono", mp.getYapeTelefono() != null ? mp.getYapeTelefono() : "",
-                "plinActivo", mp.isPlinActivo(),
-                "plinTelefono", mp.getPlinTelefono() != null ? mp.getPlinTelefono() : "",
-                "transferenciaActiva", mp.isTransferenciaActiva(),
-                "transferencias", mp.getTransferencias() != null ? mp.getTransferencias() : List.of()
-        ));
-        return ResponseEntity.ok(m);
+        return ResponseEntity.ok(ConfiguracionPlataformaMapper.aMapaPublico(
+                configRepo.findById(1).orElse(null)));
     }
 
     @PostMapping("/enviar-verificacion")
@@ -86,17 +49,20 @@ public class ConfiguracionController {
         String email = request.get("emailSmtp");
         String pass = request.get("passwordSmtp");
 
-        if (email == null || !email.endsWith("@gmail.com")) 
+        if (email == null || !email.endsWith("@gmail.com")) {
             return ResponseEntity.badRequest().body(Map.of("message", "Debe ser un correo @gmail.com"));
-        
-        if (pass == null || pass.length() < 16) 
+        }
+
+        if (pass == null || pass.length() != 16) {
             return ResponseEntity.badRequest().body(Map.of("message", "La contraseña de aplicación de Google debe tener 16 caracteres"));
+        }
 
         String numCode = String.format("%06d", new Random().nextInt(999999));
         VerificationCode vCode = new VerificationCode();
-        vCode.setEmail(email);
-        vCode.setCode(numCode);
-        vCode.setExpirationTime(LocalDateTime.now().plusMinutes(1)); 
+        vCode.setReferencia(email);
+        vCode.setCodigo(numCode);
+        vCode.setProposito("smtp_test");
+        vCode.setFechaExpiracion(LocalDateTime.now().plusMinutes(2));
         codeSqlRepo.save(vCode);
 
         try {
@@ -107,14 +73,12 @@ public class ConfiguracionController {
                     pass,
                     EmailService.TipoCodigoCorreo.SETUP_SMTP,
                     "Mikunaigen",
-                    null
-            );
+                    null);
             return ResponseEntity.ok(Map.of("message", "Código enviado correctamente a " + email));
         } catch (EmailDispatchException e) {
             return ResponseEntity.internalServerError().body(Map.of(
                     "message",
-                    "Error al enviar el correo. Ref: " + e.trackingId() + " (" + e.stage() + ")"
-            ));
+                    "Error al enviar el correo. Ref: " + e.trackingId() + " (" + e.stage() + ")"));
         } catch (Exception e) {
             return ResponseEntity.internalServerError().body(Map.of("message", "No se pudo enviar el correo. Verifica tu contraseña de aplicación."));
         }
@@ -123,105 +87,146 @@ public class ConfiguracionController {
     @PostMapping("/validar-y-guardar")
     public ResponseEntity<?> validarYGuardar(@RequestBody Map<String, Object> data) {
         String email = (String) data.get("emailSmtp");
-        if (email == null || email.isBlank())
+        if (email == null || email.isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("message", "El correo SMTP es obligatorio."));
+        }
 
         String newPassRaw = (String) data.get("passwordSmtp");
-        if (newPassRaw != null && newPassRaw.isBlank())
+        if (newPassRaw != null && newPassRaw.isBlank()) {
             newPassRaw = null;
+        }
 
-        Optional<ConfiguracionSistema> existingOpt = configNoSqlRepo.findById("GLOBAL_CONFIG");
-        ConfiguracionSistema existing = existingOpt.orElse(null);
-
+        ConfiguracionGlobal existing = configRepo.findById(1).orElse(null);
         boolean primeraConfig = existing == null || !existing.isConfiguracionCompleta();
         boolean requiereCodigo;
         if (primeraConfig) {
             requiereCodigo = true;
-            if (newPassRaw == null || newPassRaw.isEmpty())
+            if (newPassRaw == null || newPassRaw.isEmpty()) {
                 return ResponseEntity.badRequest().body(Map.of("message", "La contraseña de aplicación de Google es obligatoria en la primera configuración."));
+            }
         } else {
-            boolean emailCambiado = existing.getEmailSmtp() == null || !Objects.equals(existing.getEmailSmtp(), email);
+            boolean emailCambiado = existing.getSmtpEmail() == null || !Objects.equals(existing.getSmtpEmail(), email);
             boolean passNuevo = newPassRaw != null && !newPassRaw.isEmpty();
             requiereCodigo = emailCambiado || passNuevo;
         }
 
         if (requiereCodigo) {
             String codeIn = (String) data.get("codigoVerificacion");
-            if (codeIn == null || codeIn.isBlank())
+            if (codeIn == null || codeIn.isBlank()) {
                 return ResponseEntity.badRequest().body(Map.of("message", "Debes ingresar el código de verificación enviado al correo SMTP."));
+            }
 
-            VerificationCode vCode = codeSqlRepo.findFirstByEmailAndUsedOrderByExpirationTimeDesc(email, false)
+            VerificationCode vCode = codeSqlRepo.findFirstByReferenciaAndUsadoOrderByFechaExpiracionDesc(email, false)
                     .orElse(null);
 
-            if (vCode == null || !vCode.getCode().equals(codeIn))
+            if (vCode == null || !vCode.getCode().equals(codeIn)) {
                 return ResponseEntity.badRequest().body(Map.of("message", "El código ingresado es incorrecto."));
+            }
 
-            if (LocalDateTime.now().isAfter(vCode.getExpirationTime()))
+            if (LocalDateTime.now().isAfter(vCode.getExpirationTime())) {
                 return ResponseEntity.badRequest().body(Map.of("message", "El código ha expirado. Solicita uno nuevo."));
+            }
 
             vCode.setUsed(true);
             codeSqlRepo.save(vCode);
         }
 
-        ConfiguracionSistema config = existing != null ? existing : new ConfiguracionSistema();
-        if (config.getId() == null)
-            config.setId("GLOBAL_CONFIG");
-
-        config.setEmailSmtp(email);
+        ConfiguracionGlobal config = existing != null ? existing : new ConfiguracionGlobal();
+        config.setId(1);
+        config.setSmtpEmail(email);
         if (newPassRaw != null && !newPassRaw.isEmpty()) {
-            config.setPasswordSmtp(newPassRaw);
-        } else if (existing != null && existing.getPasswordSmtp() != null) {
-            config.setPasswordSmtp(existing.getPasswordSmtp());
+            config.setSmtpContrasenaApp(newPassRaw);
+        } else if (existing != null && existing.getSmtpContrasenaApp() != null) {
+            config.setSmtpContrasenaApp(existing.getSmtpContrasenaApp());
         } else if (primeraConfig) {
             return ResponseEntity.badRequest().body(Map.of("message", "La contraseña de aplicación es obligatoria."));
         }
 
-        config.setNombreNegocio((String) data.get("nombreNegocio"));
-        config.setTelefonoNegocio((String) data.get("telefonoNegocio"));
-        config.setTerminosCondiciones((String) data.get("terminosCondiciones"));
-        config.setMediosPago(parseMediosPago(data.get("mediosPago")));
+        String nombre = (String) data.get("nombreNegocio");
+        if (nombre == null || nombre.isBlank()) {
+            nombre = (String) data.get("nombrePlataforma");
+        }
+        config.setNombrePlataforma(nombre != null ? nombre : "Mikunaigen");
+        config.setTelefonoContacto((String) data.get("telefonoNegocio"));
+
+        Object mpRaw = data.get("mediosPago");
+        if (mpRaw instanceof Map<?, ?> mp) {
+            config.setNumeroYape(safeStr(mp.get("yapeTelefono")));
+            config.setNumeroPlin(safeStr(mp.get("plinTelefono")));
+            Object transferencias = mp.get("transferencias");
+            if (transferencias instanceof java.util.List<?> lista && !lista.isEmpty() && lista.get(0) instanceof Map<?, ?> b) {
+                config.setBancoNombre(safeStr(b.get("banco")));
+                config.setCuentaBancaria(safeStr(b.get("numeroCuenta")));
+                config.setCci(safeStr(b.get("cci")));
+            }
+        }
 
         String logo = (String) data.get("logoBase64");
         if (logo != null && !logo.isBlank()) {
-            config.setLogoBase64(logo);
-        } else if (existing != null && existing.getLogoBase64() != null) {
-            config.setLogoBase64(existing.getLogoBase64());
+            config.setLogoBytea(ConfiguracionPlataformaMapper.decodificarLogo(logo));
+        } else if (existing != null && existing.getLogoBytea() != null) {
+            config.setLogoBytea(existing.getLogoBytea());
         }
 
-        config.setConfiguracionCompleta(true);
-        config.setSmtpCredentialsInvalid(false);
-        configNoSqlRepo.save(config);
+        config.setSmtpEstado("activo");
+        config.setSmtpFechaConfiguracion(LocalDateTime.now());
+        config.setSmtpCredencialesInvalidas(false);
+        config.setActualizadoEn(LocalDateTime.now());
+        configRepo.save(config);
 
-        return ResponseEntity.ok(Map.of("message", "¡Configuración guardada con éxito!"));
+        return ResponseEntity.ok(Map.of("message", "Configuración guardada con éxito."));
     }
 
-    private ConfiguracionSistema.MediosPago parseMediosPago(Object raw) {
-        ConfiguracionSistema.MediosPago mp = new ConfiguracionSistema.MediosPago();
-        if (!(raw instanceof Map<?, ?> map)) return mp;
-
-        mp.setYapeActivo(Boolean.TRUE.equals(map.get("yapeActivo")));
-        mp.setYapeTelefono(safeStr(map.get("yapeTelefono")));
-        mp.setPlinActivo(Boolean.TRUE.equals(map.get("plinActivo")));
-        mp.setPlinTelefono(safeStr(map.get("plinTelefono")));
-        mp.setTransferenciaActiva(Boolean.TRUE.equals(map.get("transferenciaActiva")));
-
-        List<ConfiguracionSistema.TransferenciaBancaria> bancos = new ArrayList<>();
-        Object rawTransferencias = map.get("transferencias");
-        if (rawTransferencias instanceof List<?> lista) {
-            for (Object item : lista) {
-                if (!(item instanceof Map<?, ?> bm)) continue;
-                ConfiguracionSistema.TransferenciaBancaria b = new ConfiguracionSistema.TransferenciaBancaria();
-                b.setBanco(safeStr(bm.get("banco")));
-                b.setNumeroCuenta(safeStr(bm.get("numeroCuenta")));
-                b.setCci(safeStr(bm.get("cci")));
-                bancos.add(b);
-            }
+    @PostMapping("/plataforma")
+    public ResponseEntity<?> guardarPlataforma(@RequestBody Map<String, Object> data) {
+        String nombre = safeStr(data.get("nombrePlataforma"));
+        if (nombre.isBlank()) {
+            nombre = safeStr(data.get("nombreNegocio"));
         }
-        mp.setTransferencias(bancos);
-        return mp;
+        String telefono = safeStr(data.get("telefonoContacto"));
+        if (telefono.isBlank()) {
+            telefono = safeStr(data.get("telefonoNegocio"));
+        }
+        String yape = safeStr(data.get("numeroYape"));
+        String plin = safeStr(data.get("numeroPlin"));
+        String banco = safeStr(data.get("bancoNombre"));
+        String cuenta = safeStr(data.get("cuentaBancaria"));
+        String cci = safeStr(data.get("cci"));
+        String logo = (String) data.get("logoBase64");
+
+        if (nombre.isBlank() || telefono.isBlank() || yape.isBlank() || plin.isBlank()
+                || banco.isBlank() || cuenta.isBlank() || cci.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Todos los campos son obligatorios."));
+        }
+        if (!yape.matches("^9\\d{8}$") || !plin.matches("^9\\d{8}$")) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Yape y Plin deben tener 9 dígitos y empezar en 9."));
+        }
+        if (!cuenta.matches("^\\d{1,20}$") || !cci.matches("^\\d{1,20}$")) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Cuenta y CCI deben ser numéricos de hasta 20 dígitos."));
+        }
+
+        ConfiguracionGlobal config = configRepo.findById(1).orElse(new ConfiguracionGlobal());
+        config.setId(1);
+        config.setNombrePlataforma(nombre);
+        config.setTelefonoContacto(telefono);
+        config.setNumeroYape(yape);
+        config.setNumeroPlin(plin);
+        config.setBancoNombre(banco);
+        config.setCuentaBancaria(cuenta);
+        config.setCci(cci);
+        if (logo != null && !logo.isBlank()) {
+            byte[] bytes = ConfiguracionPlataformaMapper.decodificarLogo(logo);
+            if (bytes != null && bytes.length > 2 * 1024 * 1024) {
+                return ResponseEntity.badRequest().body(Map.of("message", "El logo no debe superar 2 MB."));
+            }
+            config.setLogoBytea(bytes);
+        }
+        config.setActualizadoEn(LocalDateTime.now());
+        configRepo.save(config);
+        return ResponseEntity.ok(Map.of("message", "Configuración de la plataforma guardada correctamente."));
     }
 
     private String safeStr(Object v) {
-        return v == null ? "" : String.valueOf(v);
+        return v == null ? "" : String.valueOf(v).trim();
     }
 }

@@ -1,5 +1,7 @@
 package com.mikunaigen.backend.service;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+
 import com.mikunaigen.backend.dto.CocinaIngredienteDetalle;
 import com.mikunaigen.backend.dto.CocinaLineaDetalle;
 import com.mikunaigen.backend.dto.CocinaOrdenCard;
@@ -36,6 +38,7 @@ import java.util.Set;
 import java.util.UUID;
 
 @Service
+@ConditionalOnProperty(name = "app.legacy.restaurante.habilitado", havingValue = "true")
 public class PedidoCocinaService {
 
     private static final String EST_COLA = "PAGO_VALIDADO";

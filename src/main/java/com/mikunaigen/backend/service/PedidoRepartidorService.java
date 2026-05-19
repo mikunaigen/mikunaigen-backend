@@ -1,5 +1,7 @@
 package com.mikunaigen.backend.service;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+
 import com.mikunaigen.backend.dto.CajaLineaDetalle;
 import com.mikunaigen.backend.dto.RepartidorOrdenCard;
 import com.mikunaigen.backend.dto.RepartidorOrdenDetalle;
@@ -26,6 +28,7 @@ import java.util.Set;
 import java.util.UUID;
 
 @Service
+@ConditionalOnProperty(name = "app.legacy.restaurante.habilitado", havingValue = "true")
 public class PedidoRepartidorService {
 
     private static final long MAX_BYTES = 5L * 1024 * 1024;

@@ -12,27 +12,46 @@ import java.util.UUID;
 
 public interface UserRepository extends JpaRepository<User, UUID> {
     boolean existsByEmail(String email);
+
     boolean existsByEmailIgnoreCase(String email);
-    boolean existsByDni(String dni);
+
+    default boolean existsByDni(String dni) {
+        return false;
+    }
+
     Optional<User> findByEmail(String email);
 
     Optional<User> findByEmailIgnoreCase(String email);
-    boolean existsByPhone(String phone);
-    boolean existsByPhoneAndIdNot(String phone, UUID id);
-    List<User> findByRole_NameAndIsDeletedFalse(String roleName);
 
-    long countByRole_NameAndIsDeletedFalseAndCreatedAtBetween(String roleName, LocalDateTime from, LocalDateTime toExclusive);
+    boolean existsByPhone(String telefono);
 
-    @Query("SELECT COUNT(u) FROM User u WHERE u.isDeleted = false AND u.role.name = 'CLIENTE'")
+    boolean existsByTelefono(String telefono);
+
+    default boolean existsByPhoneAndIdNot(String phone, UUID id) {
+        return existsByTelefonoAndIdNot(phone, id);
+    }
+
+    boolean existsByTelefonoAndIdNot(String telefono, UUID id);
+
+    @Query("SELECT u FROM User u WHERE u.role.nombre = :rol AND u.estado <> 'suspendido'")
+    List<User> findByRole_NameAndIsDeletedFalse(@Param("rol") String roleName);
+
+    @Query("SELECT COUNT(u) FROM User u WHERE u.role.nombre = :rol AND u.estado <> 'suspendido' AND u.fechaRegistro >= :desde AND u.fechaRegistro < :hasta")
+    long countByRole_NameAndIsDeletedFalseAndCreatedAtBetween(
+            @Param("rol") String roleName,
+            @Param("desde") LocalDateTime from,
+            @Param("hasta") LocalDateTime toExclusive);
+
+    @Query("SELECT COUNT(u) FROM User u WHERE u.estado <> 'suspendido' AND u.role.nombre IN ('estudiante', 'emprendedor', 'nutricionista')")
     long countActiveClientes();
 
     @Query(value = """
-            SELECT u.id, u.full_name
-            FROM users u
+            SELECT u.id, CONCAT(u.nombres, ' ', u.apellidos)
+            FROM usuarios u
             WHERE u.id IN :ids
             """, nativeQuery = true)
     List<Object[]> findNamesByIds(@Param("ids") List<UUID> ids);
 
-    @Query("SELECT MIN(u.createdAt) FROM User u WHERE COALESCE(u.isDeleted, false) = false AND u.role.name = 'CLIENTE'")
+    @Query("SELECT MIN(u.fechaRegistro) FROM User u WHERE u.estado <> 'suspendido' AND u.role.nombre IN ('estudiante', 'emprendedor', 'nutricionista')")
     Optional<LocalDateTime> findMinClienteCreatedAt();
 }
