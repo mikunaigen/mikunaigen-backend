@@ -4,6 +4,8 @@ import com.mikunaigen.backend.model.sql.ConfiguracionGlobal;
 import com.mikunaigen.backend.model.sql.User;
 import com.mikunaigen.backend.model.sql.VerificationCode;
 import com.mikunaigen.backend.repository.sql.ConfiguracionGlobalRepository;
+import com.mikunaigen.backend.repository.sql.RoleRepository;
+import com.mikunaigen.backend.repository.sql.SolicitudCambioRolRepository;
 import com.mikunaigen.backend.repository.sql.UserRepository;
 import com.mikunaigen.backend.repository.sql.VerificationCodeRepository;
 import com.mikunaigen.backend.exception.EmailDispatchException;
@@ -22,17 +24,23 @@ public class PerfilController {
 
     private final UserRepository userRepository;
     private final ConfiguracionGlobalRepository configuracionGlobalRepository;
+    private final SolicitudCambioRolRepository solicitudCambioRolRepository;
+    private final RoleRepository roleRepository;
     private final VerificationCodeRepository verificationCodeRepository;
     private final EmailService emailService;
 
     public PerfilController(
             UserRepository userRepository,
             ConfiguracionGlobalRepository configuracionGlobalRepository,
+            SolicitudCambioRolRepository solicitudCambioRolRepository,
+            RoleRepository roleRepository,
             VerificationCodeRepository verificationCodeRepository,
             EmailService emailService
     ) {
         this.userRepository = userRepository;
         this.configuracionGlobalRepository = configuracionGlobalRepository;
+        this.solicitudCambioRolRepository = solicitudCambioRolRepository;
+        this.roleRepository = roleRepository;
         this.verificationCodeRepository = verificationCodeRepository;
         this.emailService = emailService;
     }
@@ -145,7 +153,19 @@ public class PerfilController {
         out.put("email", user.getEmail());
         out.put("role", user.getRole() == null ? null : user.getRole().getName());
         out.put("modoOscuro", user.isModoOscuro());
+        solicitudCambioRolRepository.findFirstByUsuarioIdAndEstadoIgnoreCase(user.getId(), "pendiente")
+                .ifPresent(s -> {
+                    out.put("solicitudPlanEnRevision", true);
+                    out.put("solicitudPlanRol", roleRepoNombre(s.getRolSolicitadoId()));
+                });
+        if (!out.containsKey("solicitudPlanEnRevision")) {
+            out.put("solicitudPlanEnRevision", false);
+        }
         return out;
+    }
+
+    private String roleRepoNombre(Integer rolId) {
+        return roleRepository.findById(rolId).map(r -> r.getNombre()).orElse("");
     }
 
     private User obtenerUsuarioAutenticado() {
