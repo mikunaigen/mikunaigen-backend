@@ -60,6 +60,7 @@ public class SecurityConfig {
                         "/api/ping",
                         "/api/auth/login",
                         "/api/auth/check-admin",
+                        "/api/auth/estado-usuarios",
                         "/api/auth/enviar-codigo-registro",
                         "/api/auth/registrar",
                         "/api/auth/registrar-cliente",

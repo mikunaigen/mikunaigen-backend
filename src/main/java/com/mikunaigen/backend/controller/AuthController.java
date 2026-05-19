@@ -40,8 +40,17 @@ public class AuthController {
 
     @GetMapping("/check-admin")
     public ResponseEntity<?> checkAdmin() {
-        boolean hasAdmin = userRepo.count() > 0;
-        return ResponseEntity.ok(Map.of("hasAdmin", hasAdmin));
+        return estadoUsuarios();
+    }
+
+    @GetMapping("/estado-usuarios")
+    public ResponseEntity<?> estadoUsuarios() {
+        boolean hayUsuarios = userRepo.count() > 0;
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("hayUsuarios", hayUsuarios);
+        body.put("sinUsuarios", !hayUsuarios);
+        body.put("hasAdmin", hayUsuarios);
+        return ResponseEntity.ok(body);
     }
 
     @PostMapping("/enviar-codigo-registro")
@@ -72,6 +81,10 @@ public class AuthController {
 
     @PostMapping("/registrar-admin")
     public ResponseEntity<?> registrarAdmin(@RequestBody Map<String, String> data) {
+        if (userRepo.count() > 0) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "message", "El administrador inicial ya fue registrado. Usa inicio de sesión."));
+        }
         return registrarUsuarioClienteInterno(data);
     }
 
@@ -81,6 +94,8 @@ public class AuthController {
     }
 
     private ResponseEntity<?> registrarUsuarioClienteInterno(Map<String, String> data) {
+        boolean primerUsuario = userRepo.count() == 0;
+
         String email = data.get("email");
         String codeIn = data.get("codigo");
 
@@ -116,28 +131,32 @@ public class AuthController {
         user.setAddress(address);
         user.setFirstLogin(false);
 
-        if (userRepo.count() == 0) {
+        if (primerUsuario) {
             user.setRole(roleRepo.findByNombre("administrador").orElseGet(() ->
                     roleRepo.findByName("ADMIN").orElseThrow()));
-            user.setEstado("activo");
         } else {
             user.setRole(roleRepo.findByNombre("estudiante").orElseGet(() ->
                     roleRepo.findByName("CLIENTE").orElseThrow()));
-            user.setEstado("activo");
         }
+        user.setEstado("activo");
 
         userRepo.save(user);
         vCode.setUsed(true);
         codeRepo.save(vCode);
 
-        return ResponseEntity.ok(Map.of("message", "Cuenta creada exitosamente."));
+        String mensaje = primerUsuario
+                ? "Cuenta de administrador creada exitosamente."
+                : "Cuenta creada exitosamente.";
+        return ResponseEntity.ok(Map.of(
+                "message", mensaje,
+                "primerUsuario", primerUsuario,
+                "role", user.getRole().getName()));
     }
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody Map<String, String> credentials, HttpServletRequest request) {
         String email = credentials.get("email");
         String password = credentials.get("password");
-        boolean soloAdministrador = "true".equalsIgnoreCase(credentials.get("soloAdministrador"));
         String ip = obtenerIpCliente(request);
         String userAgent = request.getHeader("User-Agent");
         String emailAudit = (email == null || email.isBlank()) ? "(sin-email)" : email.trim();
@@ -163,12 +182,6 @@ public class AuthController {
         if (user == null || user.isDeleted()) {
             registrarAuditoriaLogin(emailAudit, ip, userAgent, "FAILED", "Correo no existe");
             return ResponseEntity.status(401).body(Map.of("message", "El correo electrónico no existe."));
-        }
-
-        String rol = user.getRole() != null ? user.getRole().getName() : "";
-        if (soloAdministrador && !"administrador".equalsIgnoreCase(rol) && !"ADMIN".equalsIgnoreCase(rol)) {
-            registrarAuditoriaLogin(emailAudit, ip, userAgent, "FAILED", "Sin rol administrador");
-            return ResponseEntity.status(401).body(Map.of("message", "El correo no tiene rol de administrador."));
         }
 
         if (user.isFirstLogin()) {
