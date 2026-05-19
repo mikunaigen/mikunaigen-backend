@@ -21,6 +21,8 @@ import java.util.Random;
 @RequestMapping("/api/configuracion")
 public class ConfiguracionController {
 
+    private static final int TERMINOS_CONDICIONES_MAX = 5000;
+
     @Autowired
     private ConfiguracionGlobalRepository configRepo;
 
@@ -149,6 +151,13 @@ public class ConfiguracionController {
         config.setNombrePlataforma(nombre != null ? nombre : "Mikunaigen");
         config.setTelefonoContacto((String) data.get("telefonoNegocio"));
 
+        String terminos = safeStr(data.get("terminosCondiciones"));
+        Optional<String> errorTerminos = validarTerminosCondiciones(terminos);
+        if (errorTerminos.isPresent()) {
+            return ResponseEntity.badRequest().body(Map.of("message", errorTerminos.get()));
+        }
+        config.setTerminosCondiciones(terminos);
+
         Object mpRaw = data.get("mediosPago");
         if (mpRaw instanceof Map<?, ?> mp) {
             config.setNumeroYape(safeStr(mp.get("yapeTelefono")));
@@ -223,6 +232,14 @@ public class ConfiguracionController {
         }
 
         ConfiguracionGlobal config = configRepo.findById(1).orElse(new ConfiguracionGlobal());
+        String terminos = data.containsKey("terminosCondiciones")
+                ? safeStr(data.get("terminosCondiciones"))
+                : safeStr(config.getTerminosCondiciones());
+        Optional<String> errorTerminos = validarTerminosCondiciones(terminos);
+        if (errorTerminos.isPresent()) {
+            return ResponseEntity.badRequest().body(Map.of("message", errorTerminos.get()));
+        }
+
         config.setId(1);
         config.setNombrePlataforma(nombre);
         config.setTelefonoContacto(telefono);
@@ -231,6 +248,7 @@ public class ConfiguracionController {
         config.setBancoNombre(banco);
         config.setCuentaBancaria(cuenta);
         config.setCci(cci);
+        config.setTerminosCondiciones(terminos);
         if (logo != null && !logo.isBlank()) {
             byte[] bytes = ConfiguracionPlataformaMapper.decodificarLogo(logo);
             if (bytes != null && bytes.length > 2 * 1024 * 1024) {
@@ -250,5 +268,15 @@ public class ConfiguracionController {
 
     private String safeStr(Object v) {
         return v == null ? "" : String.valueOf(v).trim();
+    }
+
+    private Optional<String> validarTerminosCondiciones(String terminos) {
+        if (terminos.isBlank()) {
+            return Optional.of("Los términos y condiciones son obligatorios.");
+        }
+        if (terminos.length() > TERMINOS_CONDICIONES_MAX) {
+            return Optional.of("Los términos y condiciones no pueden superar los " + TERMINOS_CONDICIONES_MAX + " caracteres.");
+        }
+        return Optional.empty();
     }
 }

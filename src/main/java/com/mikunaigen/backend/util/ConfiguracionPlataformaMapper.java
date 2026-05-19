@@ -19,6 +19,7 @@ public final class ConfiguracionPlataformaMapper {
             m.put("nombreNegocio", "Mikunaigen");
             m.put("telefonoContacto", "");
             m.put("telefonoNegocio", "");
+            m.put("terminosCondiciones", "");
             m.put("logoBase64", "");
             m.put("emailSmtp", "");
             m.put("smtpPasswordConfigured", false);
@@ -35,6 +36,7 @@ public final class ConfiguracionPlataformaMapper {
         m.put("nombreNegocio", c.getNombrePlataforma());
         m.put("telefonoContacto", c.getTelefonoContacto() != null ? c.getTelefonoContacto() : "");
         m.put("telefonoNegocio", c.getTelefonoContacto() != null ? c.getTelefonoContacto() : "");
+        m.put("terminosCondiciones", c.getTerminosCondiciones() != null ? c.getTerminosCondiciones() : "");
         m.put("logoBase64", logoBase64(c));
         m.put("emailSmtp", c.getSmtpEmail() != null ? c.getSmtpEmail() : "");
         m.put("smtpPasswordConfigured", c.getSmtpContrasenaApp() != null && !c.getSmtpContrasenaApp().isBlank());

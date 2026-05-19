@@ -7,6 +7,7 @@ import com.mikunaigen.backend.security.JwtService;
 import com.mikunaigen.backend.model.sql.ConfiguracionGlobal;
 import com.mikunaigen.backend.repository.sql.ConfiguracionGlobalRepository;
 import com.mikunaigen.backend.exception.EmailDispatchException;
+import com.mikunaigen.backend.service.RegistroTelegramService;
 import com.mikunaigen.backend.service.ShoppingCartService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -33,6 +34,7 @@ public class AuthController {
     @Autowired private PasswordEncoder passwordEncoder;
     @Autowired private ShoppingCartService shoppingCartService;
     @Autowired private JwtService jwtService;
+    @Autowired private RegistroTelegramService registroTelegramService;
 
     private static final int MAX_INTENTOS_FALLIDOS = 3;
     private static final long BLOQUEO_MINUTOS = 60;
@@ -52,30 +54,9 @@ public class AuthController {
         return ResponseEntity.ok(body);
     }
 
-    @PostMapping("/enviar-codigo-registro")
-    public ResponseEntity<?> enviarCodigo(@RequestBody Map<String, String> request) {
-        String email = trimToNull(request.get("email"));
-        String dni = trimToNull(request.get("dni"));
-        String phone = trimToNull(request.get("phone"));
-        String fullName = trimToNull(request.get("fullName"));
-
-        if (email == null) {
-            return ResponseEntity.badRequest().body(Map.of("message", "El correo electrónico es obligatorio."));
-        }
-
-        ResponseEntity<?> duplicado = validarDuplicadosPrevioCodigo(email, dni, phone, fullName);
-        if (duplicado != null) return duplicado;
-        
-        ConfiguracionGlobal config = configRepo.findById(1).orElse(null);
-        if (config == null || config.getSmtpEmail() == null || config.getSmtpEmail().isBlank())
-            return ResponseEntity.badRequest().body(Map.of("message", "El sistema no ha sido configurado aún."));
-
-        return generarYEnviarCodigo(email, config, EmailService.TipoCodigoCorreo.REGISTRO_USUARIO);
-    }
-
-    @PostMapping("/registrar")
-    public ResponseEntity<?> registrarUsuario(@RequestBody Map<String, String> data) {
-        return registrarUsuarioClienteInterno(data);
+    @PostMapping("/registrar-pendiente")
+    public ResponseEntity<?> registrarPendiente(@RequestBody Map<String, String> data) {
+        return registroTelegramService.registrarPendiente(data);
     }
 
     @PostMapping("/registrar-admin")
@@ -84,72 +65,44 @@ public class AuthController {
             return ResponseEntity.badRequest().body(Map.of(
                     "message", "El administrador inicial ya fue registrado. Usa inicio de sesión."));
         }
-        return registrarUsuarioClienteInterno(data);
+        return registroTelegramService.registrarPendiente(data);
     }
 
-    @PostMapping("/registrar-cliente")
-    public ResponseEntity<?> registrarCliente(@RequestBody Map<String, String> data) {
-        return registrarUsuarioClienteInterno(data);
+    @GetMapping("/estado-activacion/{userId}")
+    public ResponseEntity<?> estadoActivacion(@PathVariable String userId) {
+        try {
+            return ResponseEntity.ok(registroTelegramService.estadoActivacion(UUID.fromString(userId)));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Identificador de usuario inválido."));
+        }
     }
 
-    private ResponseEntity<?> registrarUsuarioClienteInterno(Map<String, String> data) {
-        boolean primerUsuario = userRepo.count() == 0;
-
-        String email = data.get("email");
-        String codeIn = data.get("codigo");
-
-        VerificationCode vCode = codeRepo.findFirstByEmailAndUsedOrderByExpirationTimeDesc(email, false).orElse(null);
-        if (vCode == null || !vCode.getCode().equals(codeIn)) 
-            return ResponseEntity.badRequest().body(Map.of("message", "Código incorrecto."));
-        
-        if (LocalDateTime.now().isAfter(vCode.getExpirationTime()))
-            return ResponseEntity.badRequest().body(Map.of("message", "El código ha expirado."));
-
-        String fullName = trimToNull(data.get("fullName"));
-        String dni = trimToNull(data.get("dni"));
-        String phone = trimToNull(data.get("phone"));
-        String address = trimToNull(data.get("address"));
-        if (fullName == null || dni == null || phone == null || address == null) {
-            return ResponseEntity.badRequest().body(Map.of("message", "Todos los campos son obligatorios."));
+    @PostMapping("/renovar-codigo-activacion/{userId}")
+    public ResponseEntity<?> renovarCodigoActivacion(@PathVariable String userId) {
+        try {
+            return registroTelegramService.renovarCodigoActivacion(UUID.fromString(userId));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Identificador de usuario inválido."));
         }
+    }
 
-        ResponseEntity<?> duplicado = validarDuplicadosUsuario(email, dni, phone, fullName);
-        if (duplicado != null) return duplicado;
-
-        String password = data.get("password");
-        if (!password.matches("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@!¡¿?#$%/&])[A-Za-z\\d@!¡¿?#$%/&]{8,}$")) {
-            return ResponseEntity.badRequest().body(Map.of("message", "La contraseña no cumple los requisitos de seguridad."));
+    @DeleteMapping("/cancelar-registro-pendiente/{userId}")
+    public ResponseEntity<?> cancelarRegistroPendiente(@PathVariable String userId) {
+        try {
+            return registroTelegramService.cancelarRegistroPendiente(UUID.fromString(userId));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Identificador de usuario inválido."));
         }
+    }
 
-        User user = new User();
-        user.setEmail(email);
-        user.setPassword(passwordEncoder.encode(password));
-        user.setDni(dni);
-        user.setFullName(fullName);
-        user.setPhone(phone);
-        user.setAddress(address);
-        user.setFirstLogin(false);
-
-        if (primerUsuario) {
-            user.setRole(roleRepo.findByNombre("administrador").orElseGet(() ->
-                    roleRepo.findByName("ADMIN").orElseThrow()));
-        } else {
-            user.setRole(roleRepo.findByNombre("estudiante").orElseGet(() ->
-                    roleRepo.findByName("CLIENTE").orElseThrow()));
+    @GetMapping("/info-telegram")
+    public ResponseEntity<?> infoTelegram() {
+        String bot = registroTelegramService.getBotUsername();
+        if (bot.isBlank()) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .body(Map.of("message", "El bot de Telegram no está configurado."));
         }
-        user.setEstado("activo");
-
-        userRepo.save(user);
-        vCode.setUsed(true);
-        codeRepo.save(vCode);
-
-        String mensaje = primerUsuario
-                ? "Cuenta de administrador creada exitosamente."
-                : "Cuenta creada exitosamente.";
-        return ResponseEntity.ok(Map.of(
-                "message", mensaje,
-                "primerUsuario", primerUsuario,
-                "role", user.getRole().getName()));
+        return ResponseEntity.ok(Map.of("telegramBotUsername", bot));
     }
 
     @PostMapping("/login")
@@ -181,6 +134,12 @@ public class AuthController {
         if (user == null || user.isDeleted()) {
             registrarAuditoriaLogin(emailAudit, ip, userAgent, "FAILED", "Correo no existe");
             return ResponseEntity.status(401).body(Map.of("message", "El correo electrónico no existe."));
+        }
+
+        if ("pendiente".equalsIgnoreCase(user.getEstado())) {
+            registrarAuditoriaLogin(emailAudit, ip, userAgent, "FAILED", "Cuenta pendiente de activación");
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
+                    "message", "Tu cuenta está pendiente de activación. Completa la verificación con Telegram."));
         }
 
         if (user.isFirstLogin()) {
@@ -446,6 +405,11 @@ public class AuthController {
         if (s == null) return null;
         String t = s.trim();
         return t.isEmpty() ? null : t;
+    }
+
+    private static boolean parseBoolean(String value) {
+        if (value == null) return false;
+        return "true".equalsIgnoreCase(value.trim()) || "1".equals(value.trim());
     }
 
     private static String normalizarNombreCompleto(String s) {

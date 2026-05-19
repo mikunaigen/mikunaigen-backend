@@ -12,4 +12,18 @@ public interface VerificationCodeRepository extends JpaRepository<VerificationCo
     default Optional<VerificationCode> findFirstByEmailAndUsedOrderByExpirationTimeDesc(String email, boolean used) {
         return findFirstByReferenciaAndUsadoOrderByFechaExpiracionDesc(email, used);
     }
+
+    Optional<VerificationCode> findFirstByCodigoAndPropositoAndUsadoOrderByFechaExpiracionDesc(
+            String codigo,
+            String proposito,
+            boolean usado
+    );
+
+    Optional<VerificationCode> findFirstByReferenciaAndPropositoAndUsadoOrderByFechaExpiracionDesc(
+            String referencia,
+            String proposito,
+            boolean usado
+    );
+
+    void deleteByReferencia(String referencia);
 }

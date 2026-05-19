@@ -22,6 +22,9 @@ public class ConfiguracionGlobal {
     @Column(name = "telefono_contacto", length = 15)
     private String telefonoContacto;
 
+    @Column(name = "terminos_condiciones", columnDefinition = "TEXT")
+    private String terminosCondiciones;
+
     @Column(name = "numero_yape", length = 9)
     private String numeroYape;
 
