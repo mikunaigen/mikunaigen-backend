@@ -168,13 +168,30 @@ public class ConfiguracionController {
             config.setLogoBytea(existing.getLogoBytea());
         }
 
+        boolean tieneYape = config.getNumeroYape() != null && !config.getNumeroYape().isBlank();
+        boolean tienePlin = config.getNumeroPlin() != null && !config.getNumeroPlin().isBlank();
+        boolean tieneTransferencia = config.getBancoNombre() != null && !config.getBancoNombre().isBlank()
+                && config.getCuentaBancaria() != null && !config.getCuentaBancaria().isBlank()
+                && config.getCci() != null && !config.getCci().isBlank();
+        if (!tieneYape && !tienePlin && !tieneTransferencia) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "message", "Debe activar y completar al menos un medio de pago (Yape, Plin o transferencia)."));
+        }
+
         config.setSmtpEstado("activo");
         config.setSmtpFechaConfiguracion(LocalDateTime.now());
         config.setSmtpCredencialesInvalidas(false);
         config.setActualizadoEn(LocalDateTime.now());
+        if (primeraConfig || !config.isSetupCompletado()) {
+            if (config.isConfiguracionCompleta()) {
+                config.setSetupCompletado(true);
+            }
+        }
         configRepo.save(config);
 
-        return ResponseEntity.ok(Map.of("message", "Configuración guardada con éxito."));
+        return ResponseEntity.ok(Map.of(
+                "message", "Configuración guardada con éxito.",
+                "configuracionCompleta", config.isConfiguracionCompleta()));
     }
 
     @PostMapping("/plataforma")
@@ -222,8 +239,13 @@ public class ConfiguracionController {
             config.setLogoBytea(bytes);
         }
         config.setActualizadoEn(LocalDateTime.now());
+        if (config.isConfiguracionCompleta()) {
+            config.setSetupCompletado(true);
+        }
         configRepo.save(config);
-        return ResponseEntity.ok(Map.of("message", "Configuración de la plataforma guardada correctamente."));
+        return ResponseEntity.ok(Map.of(
+                "message", "Configuración de la plataforma guardada correctamente.",
+                "configuracionCompleta", config.isConfiguracionCompleta()));
     }
 
     private String safeStr(Object v) {

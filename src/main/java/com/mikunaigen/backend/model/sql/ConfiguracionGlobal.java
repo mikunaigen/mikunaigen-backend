@@ -55,6 +55,9 @@ public class ConfiguracionGlobal {
     @Column(name = "modo_mantenimiento_activo")
     private boolean modoMantenimientoActivo = false;
 
+    @Column(name = "setup_completado", nullable = false)
+    private boolean setupCompletado = false;
+
     @Column(name = "actualizado_en")
     private LocalDateTime actualizadoEn = LocalDateTime.now();
 
@@ -62,13 +65,28 @@ public class ConfiguracionGlobal {
     private boolean smtpCredencialesInvalidas = false;
 
     public boolean isConfiguracionCompleta() {
-        return nombrePlataforma != null && !nombrePlataforma.isBlank()
-                && logoBytea != null && logoBytea.length > 0
-                && telefonoContacto != null && !telefonoContacto.isBlank()
-                && numeroYape != null && !numeroYape.isBlank()
-                && numeroPlin != null && !numeroPlin.isBlank()
-                && bancoNombre != null && !bancoNombre.isBlank()
+        if (setupCompletado) {
+            return true;
+        }
+        if (nombrePlataforma == null || nombrePlataforma.isBlank()) {
+            return false;
+        }
+        if (logoBytea == null || logoBytea.length == 0) {
+            return false;
+        }
+        if (telefonoContacto == null || telefonoContacto.isBlank()) {
+            return false;
+        }
+        if (smtpEmail == null || smtpEmail.isBlank()
+                || smtpContrasenaApp == null || smtpContrasenaApp.isBlank()
+                || !"activo".equalsIgnoreCase(smtpEstado)) {
+            return false;
+        }
+        boolean yape = numeroYape != null && !numeroYape.isBlank();
+        boolean plin = numeroPlin != null && !numeroPlin.isBlank();
+        boolean transferencia = bancoNombre != null && !bancoNombre.isBlank()
                 && cuentaBancaria != null && !cuentaBancaria.isBlank()
                 && cci != null && !cci.isBlank();
+        return yape || plin || transferencia;
     }
 }
