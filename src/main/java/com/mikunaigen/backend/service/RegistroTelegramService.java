@@ -47,6 +47,7 @@ public class RegistroTelegramService {
     private final VerificationCodeRepository codeRepo;
     private final PasswordEncoder passwordEncoder;
     private final RegistroActivacionPushService pushService;
+    private final PreferenciasUsuarioService preferenciasUsuarioService;
     private final ConcurrentHashMap<String, ActivacionPendiente> activacionesPendientes = new ConcurrentHashMap<>();
 
     @Value("${telegram.bot.username:}")
@@ -57,13 +58,15 @@ public class RegistroTelegramService {
             RoleRepository roleRepo,
             VerificationCodeRepository codeRepo,
             PasswordEncoder passwordEncoder,
-            RegistroActivacionPushService pushService
+            RegistroActivacionPushService pushService,
+            PreferenciasUsuarioService preferenciasUsuarioService
     ) {
         this.userRepo = userRepo;
         this.roleRepo = roleRepo;
         this.codeRepo = codeRepo;
         this.passwordEncoder = passwordEncoder;
         this.pushService = pushService;
+        this.preferenciasUsuarioService = preferenciasUsuarioService;
     }
 
     public String getBotUsername() {
@@ -139,6 +142,9 @@ public class RegistroTelegramService {
         user.setRole(rol);
         user.setActualizadoEn(LocalDateTime.now());
         user = userRepo.save(user);
+        if (!primerUsuario) {
+            preferenciasUsuarioService.asegurarPreferenciasIniciales(user.getId());
+        }
 
         invalidarCodigosActivacion(user.getId());
         VerificationCode vCode = crearCodigoActivacion(user.getId());
@@ -324,6 +330,7 @@ public class RegistroTelegramService {
         user.setEstado("activo");
         user.setActualizadoEn(LocalDateTime.now());
         userRepo.save(user);
+        preferenciasUsuarioService.asegurarPreferenciasIniciales(user.getId());
 
         vCode.setUsado(true);
         codeRepo.save(vCode);

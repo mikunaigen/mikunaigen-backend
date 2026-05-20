@@ -131,9 +131,14 @@ public class AuthController {
         }
 
         User user = userRepo.findByEmail(email).orElse(null);
-        if (user == null || user.isDeleted()) {
+        if (user == null) {
             registrarAuditoriaLogin(emailAudit, ip, userAgent, "FAILED", "Correo no existe");
             return ResponseEntity.status(401).body(Map.of("message", "El correo electrónico no existe."));
+        }
+        if (user.isDeleted()) {
+            registrarAuditoriaLogin(emailAudit, ip, userAgent, "FAILED", "Cuenta suspendida");
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
+                    "message", "Tu cuenta está suspendida. Contacta al administrador de la plataforma."));
         }
 
         if ("pendiente".equalsIgnoreCase(user.getEstado())) {
