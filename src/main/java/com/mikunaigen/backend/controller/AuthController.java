@@ -8,7 +8,6 @@ import com.mikunaigen.backend.model.sql.ConfiguracionGlobal;
 import com.mikunaigen.backend.repository.sql.ConfiguracionGlobalRepository;
 import com.mikunaigen.backend.exception.EmailDispatchException;
 import com.mikunaigen.backend.service.RegistroTelegramService;
-import com.mikunaigen.backend.service.ShoppingCartService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -32,7 +31,6 @@ public class AuthController {
     @Autowired private EmailService emailService;
     @Autowired private ConfiguracionGlobalRepository configRepo;
     @Autowired private PasswordEncoder passwordEncoder;
-    @Autowired private ShoppingCartService shoppingCartService;
     @Autowired private JwtService jwtService;
     @Autowired private RegistroTelegramService registroTelegramService;
 
@@ -160,10 +158,6 @@ public class AuthController {
             bodyFirst.put("role", user.getRole().getName());
             bodyFirst.put("darkMode", user.isDarkMode());
             bodyFirst.put("userId", user.getId().toString());
-            ShoppingCartService.LoginCartPayload firstCart =
-                    shoppingCartService.loadSanitizeAndEnrich(user.getId().toString());
-            bodyFirst.put("cart", firstCart.cart());
-            bodyFirst.put("removedItems", firstCart.removedItems());
             return ResponseEntity.ok(bodyFirst);
         }
 
@@ -215,9 +209,6 @@ public class AuthController {
         body.put("firstLogin", false);
         body.put("darkMode", user.isDarkMode());
         body.put("userId", user.getId().toString());
-        ShoppingCartService.LoginCartPayload payload = shoppingCartService.loadSanitizeAndEnrich(user.getId().toString());
-        body.put("cart", payload.cart());
-        body.put("removedItems", payload.removedItems());
         return ResponseEntity.ok(body);
     }
 
