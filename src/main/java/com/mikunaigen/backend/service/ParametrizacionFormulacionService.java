@@ -29,7 +29,7 @@ public class ParametrizacionFormulacionService {
 
     private static final Set<String> CATEGORIAS = Set.of(
             "Cereales", "Verduras", "Frutas", "Grasas", "Pescados", "Carnes",
-            "Leche", "Huevos", "Azucarados", "Leguminosas", "Tubérculos"
+            "Leche", "Bebidas", "Huevos", "Azucarados", "Preparados", "Leguminosas", "Tubérculos"
     );
 
     private final PreferenciasUsuarioRepository preferenciasRepo;

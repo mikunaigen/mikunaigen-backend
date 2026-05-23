@@ -5,14 +5,25 @@ import com.mikunaigen.backend.model.sql.User;
 import com.mikunaigen.backend.repository.sql.AlimentoDatasetRepository;
 import com.mikunaigen.backend.repository.sql.UserRepository;
 import org.springframework.http.HttpStatus;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.io.BufferedReader;
-import java.io.InputStreamReader;
+import java.io.StringReader;
 import java.math.BigDecimal;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.sql.Types;
+import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CharsetDecoder;
+import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -30,7 +41,25 @@ public class AdminAlimentoDatasetService {
 
     private static final Set<String> CATEGORIAS = Set.of(
             "Cereales", "Verduras", "Frutas", "Grasas", "Pescados", "Carnes",
-            "Leche", "Huevos", "Azucarados", "Leguminosas", "Tubérculos"
+            "Leche", "Bebidas", "Huevos", "Azucarados", "Preparados", "Leguminosas", "Tubérculos"
+    );
+
+    private static final Map<String, String> GRUPO_LETRA_MINSA = Map.ofEntries(
+            Map.entry("A", "Cereales"),
+            Map.entry("B", "Verduras"),
+            Map.entry("C", "Frutas"),
+            Map.entry("D", "Grasas"),
+            Map.entry("E", "Pescados"),
+            Map.entry("F", "Carnes"),
+            Map.entry("G", "Leche"),
+            Map.entry("H", "Bebidas"),
+            Map.entry("J", "Huevos"),
+            Map.entry("K", "Azucarados"),
+            Map.entry("L", "Verduras"),
+            Map.entry("Q", "Leche"),
+            Map.entry("S", "Preparados"),
+            Map.entry("T", "Leguminosas"),
+            Map.entry("U", "Tubérculos")
     );
 
     private static final List<String> CAMPOS_NUMERICOS = List.of(
@@ -41,13 +70,34 @@ public class AdminAlimentoDatasetService {
     );
 
     private static final long MAX_CSV_BYTES = 5L * 1024 * 1024;
+    private static final int JDBC_BATCH_SIZE = 100;
+    private static final int PERSISTIR_CSV_CHUNK = 100;
+
+    private static final String INSERT_ALIMENTO_SQL = """
+            INSERT INTO alimentos_dataset (
+                codigo_minsa, nombre, categoria, energia_kcal, agua_g, proteinas_g, grasa_total_g,
+                carbohidratos_totales_g, carbohidratos_disponibles_g, fibra_g, cenizas_g, calcio_mg,
+                fosforo_mg, zinc_mg, hierro_mg, beta_caroteno_ug, vitamina_a_ug, tiamina_mg,
+                riboflavina_mg, niacina_mg, vitamina_c_mg, acido_folico_ug, sodio_mg, potasio_mg,
+                costo_kg_soles, meses_disponibilidad, modificado_por, fecha_modificacion
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """;
 
     private final AlimentoDatasetRepository alimentoRepo;
     private final UserRepository userRepo;
+    private final JdbcTemplate jdbcTemplate;
+    private final TransactionTemplate transactionTemplate;
 
-    public AdminAlimentoDatasetService(AlimentoDatasetRepository alimentoRepo, UserRepository userRepo) {
+    public AdminAlimentoDatasetService(
+            AlimentoDatasetRepository alimentoRepo,
+            UserRepository userRepo,
+            JdbcTemplate jdbcTemplate,
+            PlatformTransactionManager transactionManager
+    ) {
         this.alimentoRepo = alimentoRepo;
         this.userRepo = userRepo;
+        this.jdbcTemplate = jdbcTemplate;
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
     }
 
     public Map<String, Object> estado() {
@@ -81,6 +131,56 @@ public class AdminAlimentoDatasetService {
     }
 
     public List<Map<String, Object>> listar(
+            String nombre,
+            String grupo,
+            String campoNutricional,
+            String rangoFiltro,
+            BigDecimal minPersonalizado,
+            BigDecimal maxPersonalizado
+    ) {
+        return listarFiltrados(nombre, grupo, campoNutricional, rangoFiltro, minPersonalizado, maxPersonalizado);
+    }
+
+    public Map<String, Object> listarPaginado(
+            String nombre,
+            String grupo,
+            String campoNutricional,
+            String rangoFiltro,
+            BigDecimal minPersonalizado,
+            BigDecimal maxPersonalizado,
+            int page,
+            int size
+    ) {
+        int tamPagina = normalizarTamanoPagina(size);
+        List<Map<String, Object>> todos = listarFiltrados(
+                nombre, grupo, campoNutricional, rangoFiltro, minPersonalizado, maxPersonalizado
+        );
+        int total = todos.size();
+        int totalPages = total == 0 ? 0 : (int) Math.ceil((double) total / tamPagina);
+        int pagina = Math.max(0, page);
+        if (totalPages > 0 && pagina >= totalPages) {
+            pagina = totalPages - 1;
+        }
+        int desde = pagina * tamPagina;
+        int hasta = Math.min(desde + tamPagina, total);
+        List<Map<String, Object>> paginaDatos = desde >= hasta ? List.of() : todos.subList(desde, hasta);
+        return Map.of(
+                "alimentos", paginaDatos,
+                "total", total,
+                "page", pagina,
+                "size", tamPagina,
+                "totalPages", totalPages
+        );
+    }
+
+    private int normalizarTamanoPagina(int size) {
+        if (size == 50 || size == 100) {
+            return size;
+        }
+        return 20;
+    }
+
+    private List<Map<String, Object>> listarFiltrados(
             String nombre,
             String grupo,
             String campoNutricional,
@@ -153,7 +253,6 @@ public class AdminAlimentoDatasetService {
         );
     }
 
-    @Transactional
     public Map<String, Object> importarCsv(MultipartFile archivo, UUID adminId) {
         if (archivo == null || archivo.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Debes seleccionar un archivo CSV.");
@@ -168,8 +267,7 @@ public class AdminAlimentoDatasetService {
 
         List<AlimentoDataset> importados = new ArrayList<>();
         LocalDateTime ahora = LocalDateTime.now();
-        try (BufferedReader reader = new BufferedReader(
-                new InputStreamReader(archivo.getInputStream(), StandardCharsets.UTF_8))) {
+        try (BufferedReader reader = new BufferedReader(new StringReader(leerTextoCsv(archivo)))) {
             String headerLine = reader.readLine();
             if (headerLine == null) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El archivo CSV está vacío.");
@@ -182,12 +280,13 @@ public class AdminAlimentoDatasetService {
                 if (linea.isBlank()) {
                     continue;
                 }
-                String[] cols = parsearLineaCsv(linea);
-                if (cols.length != CSV_COLUMNAS.size()) {
+                String[] cols = ajustarColumnas(parsearLineaCsv(linea), fila);
+                try {
+                    importados.add(parsearFilaCsv(cols));
+                } catch (ResponseStatusException e) {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                            "Fila " + fila + ": se esperaban " + CSV_COLUMNAS.size() + " columnas.");
+                            "Fila " + fila + ": " + e.getReason());
                 }
-                importados.add(parsearFilaCsv(cols));
             }
         } catch (ResponseStatusException e) {
             throw e;
@@ -199,36 +298,259 @@ public class AdminAlimentoDatasetService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El CSV no contiene filas de datos.");
         }
 
-        for (AlimentoDataset a : importados) {
+        int registrosProcesados = persistirImportadosEnChunks(importados, adminId, ahora);
+
+        return Map.of(
+                "message", "Dataset importado correctamente.",
+                "registrosProcesados", registrosProcesados,
+                "total", alimentoRepo.count()
+        );
+    }
+
+    public Map<String, Object> importarLineasCsv(List<String> lineasDatos, int filaInicio, UUID adminId) {
+        if (lineasDatos == null || lineasDatos.isEmpty()) {
+            return Map.of("procesadasEnLote", 0, "total", alimentoRepo.count());
+        }
+        Map<String, Object> res = importarLineasConProgreso(lineasDatos, adminId, null, filaInicio);
+        return Map.of(
+                "procesadasEnLote", res.get("registrosProcesados"),
+                "total", res.get("total")
+        );
+    }
+
+    public Map<String, Object> importarLineasConProgreso(
+            List<String> lineasDatos,
+            UUID adminId,
+            CsvImportProgressListener listener
+    ) {
+        return importarLineasConProgreso(lineasDatos, adminId, listener, 2);
+    }
+
+    public Map<String, Object> importarLineasConProgreso(
+            List<String> lineasDatos,
+            UUID adminId,
+            CsvImportProgressListener listener,
+            int filaInicio
+    ) {
+        if (lineasDatos == null || lineasDatos.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El CSV no contiene filas de datos.");
+        }
+        LocalDateTime ahora = LocalDateTime.now();
+        List<AlimentoDataset> lote = new ArrayList<>();
+        int registrosProcesados = 0;
+        for (int i = 0; i < lineasDatos.size(); i++) {
+            String linea = lineasDatos.get(i);
+            int fila = filaInicio + i;
+            if (linea.isBlank()) {
+                continue;
+            }
+            String[] cols = ajustarColumnas(parsearLineaCsv(linea), fila);
+            try {
+                lote.add(parsearFilaCsv(cols));
+            } catch (ResponseStatusException e) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Fila " + fila + ": " + e.getReason());
+            }
+            if (lote.size() >= PERSISTIR_CSV_CHUNK) {
+                registrosProcesados += guardarLoteImportacion(lote, adminId, ahora);
+                lote.clear();
+            }
+        }
+        if (!lote.isEmpty()) {
+            registrosProcesados += guardarLoteImportacion(lote, adminId, ahora);
+        }
+        if (registrosProcesados == 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El CSV no contiene filas de datos.");
+        }
+        return Map.of(
+                "message", "Dataset importado correctamente.",
+                "registrosProcesados", registrosProcesados,
+                "total", alimentoRepo.count()
+        );
+    }
+
+    private int persistirImportadosEnChunks(List<AlimentoDataset> importados, UUID adminId, LocalDateTime ahora) {
+        int total = 0;
+        for (int i = 0; i < importados.size(); i += PERSISTIR_CSV_CHUNK) {
+            int fin = Math.min(i + PERSISTIR_CSV_CHUNK, importados.size());
+            List<AlimentoDataset> lote = new ArrayList<>(importados.subList(i, fin));
+            total += guardarLoteImportacion(lote, adminId, ahora);
+        }
+        return total;
+    }
+
+    private int guardarLoteImportacion(List<AlimentoDataset> lote, UUID adminId, LocalDateTime ahora) {
+        if (lote.isEmpty()) {
+            return 0;
+        }
+        for (AlimentoDataset a : lote) {
             validarEntidad(a);
             a.setModificadoPor(adminId);
             a.setFechaModificacion(ahora);
         }
+        transactionTemplate.executeWithoutResult(status -> persistirImportados(lote));
+        return lote.size();
+    }
 
-        if (alimentoRepo.count() == 0) {
-            alimentoRepo.saveAll(importados);
-        } else {
-            for (AlimentoDataset a : importados) {
-                Optional<AlimentoDataset> existente = a.getCodigoMinsa() != null && !a.getCodigoMinsa().isBlank()
-                        ? alimentoRepo.findByCodigoMinsa(a.getCodigoMinsa())
-                        : alimentoRepo.findByNombreIgnoreCase(a.getNombre());
-                if (existente.isPresent()) {
-                    AlimentoDataset dest = existente.get();
-                    copiarDatos(a, dest);
-                    dest.setModificadoPor(adminId);
-                    dest.setFechaModificacion(ahora);
-                    alimentoRepo.save(dest);
-                } else {
-                    alimentoRepo.save(a);
-                }
+    private void persistirImportados(List<AlimentoDataset> importados) {
+        if (importados.isEmpty()) {
+            return;
+        }
+
+        Map<String, AlimentoDataset> csvUnicos = new LinkedHashMap<>();
+        Map<String, String> codigoANombre = new HashMap<>();
+        
+        for (AlimentoDataset a : importados) {
+            String nombreNorm = normalizarNombreAlimento(a.getNombre());
+            String codigoNorm = a.getCodigoMinsa() != null ? normalizarCodigoMinsa(a.getCodigoMinsa()) : null;
+            
+            if (codigoNorm != null && codigoANombre.containsKey(codigoNorm)) {
+                String nombreExistente = codigoANombre.get(codigoNorm);
+                csvUnicos.remove(nombreExistente);
+            }
+            
+            csvUnicos.put(nombreNorm, a);
+            if (codigoNorm != null) {
+                codigoANombre.put(codigoNorm, nombreNorm);
+            }
+        }
+        Collection<AlimentoDataset> importadosUnicos = csvUnicos.values();
+
+        List<AlimentoDataset> existentes = alimentoRepo.findAll();
+        
+        Map<String, AlimentoDataset> porCodigo = new HashMap<>();
+        Map<String, AlimentoDataset> porNombre = new HashMap<>();
+        for (AlimentoDataset ext : existentes) {
+            indexarAlimentoEnMapas(ext, porCodigo, porNombre);
+        }
+
+        List<AlimentoDataset> nuevosParaInsertar = new ArrayList<>();
+        List<AlimentoDataset> existentesParaActualizar = new ArrayList<>();
+
+        for (AlimentoDataset origen : importadosUnicos) {
+            AlimentoDataset destino = resolverAlimentoExistente(origen, porCodigo, porNombre);
+            if (destino != null) {
+                copiarDatos(origen, destino);
+                existentesParaActualizar.add(destino);
+            } else {
+                nuevosParaInsertar.add(origen);
+                indexarAlimentoEnMapas(origen, porCodigo, porNombre);
             }
         }
 
-        return Map.of(
-                "message", "Dataset importado correctamente.",
-                "registrosProcesados", importados.size(),
-                "total", alimentoRepo.count()
-        );
+        if (!nuevosParaInsertar.isEmpty()) {
+            insertarMasivoJdbc(nuevosParaInsertar);
+        }
+
+        if (!existentesParaActualizar.isEmpty()) {
+            alimentoRepo.saveAll(existentesParaActualizar);
+        }
+    }
+
+    private void insertarMasivoJdbc(List<AlimentoDataset> lista) {
+        if (lista.isEmpty()) {
+            return;
+        }
+        for (int offset = 0; offset < lista.size(); offset += JDBC_BATCH_SIZE) {
+            int fin = Math.min(offset + JDBC_BATCH_SIZE, lista.size());
+            List<AlimentoDataset> chunk = lista.subList(offset, fin);
+            jdbcTemplate.batchUpdate(INSERT_ALIMENTO_SQL, chunk, chunk.size(), this::bindAlimentoInsert);
+        }
+    }
+
+    private void bindAlimentoInsert(PreparedStatement ps, AlimentoDataset a) throws SQLException {
+        ps.setString(1, a.getCodigoMinsa());
+        ps.setString(2, a.getNombre());
+        ps.setString(3, a.getCategoria());
+        setBigDecimal(ps, 4, a.getEnergiaKcal());
+        setBigDecimal(ps, 5, a.getAguaG());
+        setBigDecimal(ps, 6, a.getProteinasG());
+        setBigDecimal(ps, 7, a.getGrasaTotalG());
+        setBigDecimal(ps, 8, a.getCarbohidratosTotalesG());
+        setBigDecimal(ps, 9, a.getCarbohidratosDisponiblesG());
+        setBigDecimal(ps, 10, a.getFibraG());
+        setBigDecimal(ps, 11, a.getCenizasG());
+        setBigDecimal(ps, 12, a.getCalcioMg());
+        setBigDecimal(ps, 13, a.getFosforoMg());
+        setBigDecimal(ps, 14, a.getZincMg());
+        setBigDecimal(ps, 15, a.getHierroMg());
+        setBigDecimal(ps, 16, a.getBetaCarotenoUg());
+        setBigDecimal(ps, 17, a.getVitaminaAUg());
+        setBigDecimal(ps, 18, a.getTiaminaMg());
+        setBigDecimal(ps, 19, a.getRiboflavinaMg());
+        setBigDecimal(ps, 20, a.getNiacinaMg());
+        setBigDecimal(ps, 21, a.getVitaminaCMg());
+        setBigDecimal(ps, 22, a.getAcidoFolicoUg());
+        setBigDecimal(ps, 23, a.getSodioMg());
+        setBigDecimal(ps, 24, a.getPotasioMg());
+        setBigDecimal(ps, 25, a.getCostoKgSoles());
+        Integer[] meses = a.getMesesDisponibilidad();
+        if (meses == null || meses.length == 0) {
+            ps.setArray(26, ps.getConnection().createArrayOf("integer", new Integer[0]));
+        } else {
+            ps.setArray(26, ps.getConnection().createArrayOf("integer", meses));
+        }
+        if (a.getModificadoPor() != null) {
+            ps.setObject(27, a.getModificadoPor(), Types.OTHER);
+        } else {
+            ps.setNull(27, Types.OTHER);
+        }
+        if (a.getFechaModificacion() != null) {
+            ps.setTimestamp(28, Timestamp.valueOf(a.getFechaModificacion()));
+        } else {
+            ps.setNull(28, Types.TIMESTAMP);
+        }
+    }
+
+    private void setBigDecimal(PreparedStatement ps, int index, BigDecimal value) throws SQLException {
+        if (value == null) {
+            ps.setNull(index, Types.NUMERIC);
+        } else {
+            ps.setBigDecimal(index, value);
+        }
+    }
+
+    @FunctionalInterface
+    public interface CsvImportProgressListener {
+        void onProgress(int actual, int total);
+    }
+
+    private void indexarAlimentoEnMapas(
+            AlimentoDataset alimento,
+            Map<String, AlimentoDataset> porCodigo,
+            Map<String, AlimentoDataset> porNombre
+    ) {
+        if (alimento.getCodigoMinsa() != null && !alimento.getCodigoMinsa().isBlank()) {
+            porCodigo.put(normalizarCodigoMinsa(alimento.getCodigoMinsa()), alimento);
+        }
+        if (alimento.getNombre() != null && !alimento.getNombre().isBlank()) {
+            porNombre.put(normalizarNombreAlimento(alimento.getNombre()), alimento);
+        }
+    }
+
+    private AlimentoDataset resolverAlimentoExistente(
+            AlimentoDataset origen,
+            Map<String, AlimentoDataset> porCodigo,
+            Map<String, AlimentoDataset> porNombre
+    ) {
+        if (origen.getCodigoMinsa() != null && !origen.getCodigoMinsa().isBlank()) {
+            AlimentoDataset existentePorCodigo = porCodigo.get(normalizarCodigoMinsa(origen.getCodigoMinsa()));
+            if (existentePorCodigo != null) {
+                return existentePorCodigo;
+            }
+        }
+        if (origen.getNombre() != null && !origen.getNombre().isBlank()) {
+            return porNombre.get(normalizarNombreAlimento(origen.getNombre()));
+        }
+        return null;
+    }
+
+    private String normalizarCodigoMinsa(String codigo) {
+        return codigo.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private String normalizarNombreAlimento(String nombre) {
+        return nombre.trim().toLowerCase(Locale.ROOT);
     }
 
     private void copiarDatos(AlimentoDataset origen, AlimentoDataset dest) {
@@ -302,41 +624,109 @@ public class AdminAlimentoDatasetService {
             return false;
         }
         String v = valor.trim().toLowerCase(Locale.ROOT);
-        return v.equals("1") || v.equals("x") || v.equals("si") || v.equals("sí") || v.equals("true");
+        return v.equals("1")
+                || v.equals("x")
+                || v.equals("si")
+                || v.equals("sí")
+                || v.equals("true")
+                || v.equals("t")
+                || v.equals("yes")
+                || v.equals("verdadero");
     }
 
-    private void validarCabecera(String headerLine) {
-        String limpia = headerLine.replace("\uFEFF", "").trim();
-        String[] headers = parsearLineaCsv(limpia);
-        List<String> normalizados = Arrays.stream(headers)
-                .map(h -> h.trim().toLowerCase(Locale.ROOT))
-                .toList();
-        List<String> esperados = CSV_COLUMNAS.stream()
-                .map(s -> s.toLowerCase(Locale.ROOT))
-                .toList();
-        if (!normalizados.equals(esperados)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Las columnas del CSV no coinciden. Deben ser exactamente: " + String.join(",", CSV_COLUMNAS));
+    private String leerTextoCsv(MultipartFile archivo) throws java.io.IOException {
+        byte[] raw = archivo.getBytes();
+        if (raw.length >= 3 && raw[0] == (byte) 0xEF && raw[1] == (byte) 0xBB && raw[2] == (byte) 0xBF) {
+            raw = Arrays.copyOfRange(raw, 3, raw.length);
+        }
+        if (esUtf8Valido(raw)) {
+            return new String(raw, StandardCharsets.UTF_8);
+        }
+        return new String(raw, StandardCharsets.ISO_8859_1);
+    }
+
+    private boolean esUtf8Valido(byte[] raw) {
+        try {
+            CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder()
+                    .onMalformedInput(CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(CodingErrorAction.REPORT);
+            decoder.decode(ByteBuffer.wrap(raw));
+            return true;
+        } catch (CharacterCodingException e) {
+            return false;
         }
     }
 
+    private String[] ajustarColumnas(String[] cols, int fila) {
+        if (cols.length > CSV_COLUMNAS.size()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Fila " + fila + ": se esperaban " + CSV_COLUMNAS.size() + " columnas, se encontraron " + cols.length + ".");
+        }
+        if (cols.length == CSV_COLUMNAS.size()) {
+            return cols;
+        }
+        String[] ajustadas = Arrays.copyOf(cols, CSV_COLUMNAS.size());
+        Arrays.fill(ajustadas, cols.length, CSV_COLUMNAS.size(), "");
+        return ajustadas;
+    }
+
+    private void validarCabecera(String headerLine) {
+        String limpia = headerLine.replace("\uFEFF", "").replace("\r", "").trim();
+        String[] headers = parsearLineaCsv(limpia);
+        List<String> normalizados = Arrays.stream(headers)
+                .map(this::normalizarNombreColumna)
+                .toList();
+        List<String> esperados = CSV_COLUMNAS.stream()
+                .map(this::normalizarNombreColumna)
+                .toList();
+        if (normalizados.size() != esperados.size()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Las columnas del CSV no coinciden. Deben ser: " + String.join(",", CSV_COLUMNAS));
+        }
+        for (int i = 0; i < esperados.size(); i++) {
+            if (!normalizados.get(i).equals(esperados.get(i))) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Columna " + (i + 1) + " incorrecta. Se esperaba \"" + CSV_COLUMNAS.get(i)
+                                + "\", se encontró \"" + headers[i].trim() + "\".");
+            }
+        }
+    }
+
+    private String normalizarNombreColumna(String columna) {
+        return columna.replace("\uFEFF", "").replace("\r", "").trim().toLowerCase(Locale.ROOT);
+    }
+
     private String[] parsearLineaCsv(String linea) {
+        String saneada = linea.replace("\r", "");
         List<String> partes = new ArrayList<>();
         StringBuilder actual = new StringBuilder();
         boolean entreComillas = false;
-        for (int i = 0; i < linea.length(); i++) {
-            char c = linea.charAt(i);
+        for (int i = 0; i < saneada.length(); i++) {
+            char c = saneada.charAt(i);
             if (c == '"') {
-                entreComillas = !entreComillas;
+                if (entreComillas && i + 1 < saneada.length() && saneada.charAt(i + 1) == '"') {
+                    actual.append('"');
+                    i++;
+                } else {
+                    entreComillas = !entreComillas;
+                }
             } else if (c == ',' && !entreComillas) {
-                partes.add(actual.toString().trim());
+                partes.add(limpiarCelda(actual.toString()));
                 actual.setLength(0);
             } else {
                 actual.append(c);
             }
         }
-        partes.add(actual.toString().trim());
+        partes.add(limpiarCelda(actual.toString()));
         return partes.toArray(new String[0]);
+    }
+
+    private String limpiarCelda(String valor) {
+        String v = valor.trim();
+        if (v.length() >= 2 && v.startsWith("\"") && v.endsWith("\"")) {
+            v = v.substring(1, v.length() - 1).trim();
+        }
+        return v.replace("\uFEFF", "");
     }
 
     private void aplicarBody(Map<String, Object> body, AlimentoDataset a) {
@@ -466,7 +856,14 @@ public class AdminAlimentoDatasetService {
         if (grupo == null || grupo.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El grupo es obligatorio.");
         }
-        String g = grupo.trim();
+        String g = limpiarCelda(grupo);
+        if (g.length() == 1) {
+            String letra = g.toUpperCase(Locale.ROOT);
+            String mapeada = GRUPO_LETRA_MINSA.get(letra);
+            if (mapeada != null) {
+                return mapeada;
+            }
+        }
         for (String cat : CATEGORIAS) {
             if (cat.equalsIgnoreCase(g)) {
                 return cat;
@@ -478,7 +875,9 @@ public class AdminAlimentoDatasetService {
                 return cat;
             }
         }
-        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Grupo no reconocido: " + grupo);
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "Grupo no reconocido: " + grupo + ". Use letra MINSA (A, B, C, D, E, F, G, H, J, K, L, Q, S, T, U) o: "
+                        + String.join(", ", CATEGORIAS));
     }
 
     private BigDecimal parseNumObligatorio(String valor, String campo) {

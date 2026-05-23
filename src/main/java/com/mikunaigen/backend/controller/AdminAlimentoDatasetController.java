@@ -3,6 +3,7 @@ package com.mikunaigen.backend.controller;
 import com.mikunaigen.backend.model.sql.User;
 import com.mikunaigen.backend.repository.sql.UserRepository;
 import com.mikunaigen.backend.service.AdminAlimentoDatasetService;
+import com.mikunaigen.backend.service.DatasetCsvImportJobService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -21,13 +22,16 @@ import java.util.UUID;
 public class AdminAlimentoDatasetController {
 
     private final AdminAlimentoDatasetService datasetService;
+    private final DatasetCsvImportJobService importJobService;
     private final UserRepository userRepository;
 
     public AdminAlimentoDatasetController(
             AdminAlimentoDatasetService datasetService,
+            DatasetCsvImportJobService importJobService,
             UserRepository userRepository
     ) {
         this.datasetService = datasetService;
+        this.importJobService = importJobService;
         this.userRepository = userRepository;
     }
 
@@ -48,10 +52,13 @@ public class AdminAlimentoDatasetController {
             @RequestParam(required = false) String campoNutricional,
             @RequestParam(required = false) String rangoFiltro,
             @RequestParam(required = false) BigDecimal min,
-            @RequestParam(required = false) BigDecimal max
+            @RequestParam(required = false) BigDecimal max,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
     ) {
-        List<Map<String, Object>> alimentos = datasetService.listar(nombre, grupo, campoNutricional, rangoFiltro, min, max);
-        return ResponseEntity.ok(Map.of("alimentos", alimentos, "total", alimentos.size()));
+        return ResponseEntity.ok(
+                datasetService.listarPaginado(nombre, grupo, campoNutricional, rangoFiltro, min, max, page, size)
+        );
     }
 
     @PostMapping
@@ -77,6 +84,43 @@ public class AdminAlimentoDatasetController {
     @PostMapping(value = "/importar-csv", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<Map<String, Object>> importarCsv(@RequestParam("archivo") MultipartFile archivo) {
         return ResponseEntity.ok(datasetService.importarCsv(archivo, adminId()));
+    }
+
+    @PostMapping("/importar-csv-lote")
+    public ResponseEntity<Map<String, Object>> importarCsvLote(@RequestBody Map<String, Object> body) {
+        @SuppressWarnings("unchecked")
+        List<String> lineas = (List<String>) body.get("lineas");
+        int filaInicio = 2;
+        Object filaInicioObj = body.get("filaInicio");
+        if (filaInicioObj instanceof Number n) {
+            filaInicio = n.intValue();
+        } else if (filaInicioObj != null) {
+            filaInicio = Integer.parseInt(String.valueOf(filaInicioObj));
+        }
+        return ResponseEntity.ok(datasetService.importarLineasCsv(lineas, filaInicio, adminId()));
+    }
+
+    @PostMapping("/importar-csv/procesar")
+    public ResponseEntity<Map<String, Object>> procesarImportacionCsv(@RequestBody Map<String, Object> body) {
+        @SuppressWarnings("unchecked")
+        List<String> lineas = (List<String>) body.get("lineas");
+        if (lineas == null || lineas.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El CSV no contiene filas de datos.");
+        }
+        Map<String, Object> job = importJobService.iniciarJob(lineas.size());
+        importJobService.ejecutarImportacion((String) job.get("jobId"), lineas, adminId());
+        return ResponseEntity.accepted().body(job);
+    }
+
+    @GetMapping("/importar-csv/progreso/{jobId}")
+    public ResponseEntity<Map<String, Object>> progresoImportacionCsv(@PathVariable String jobId) {
+        return ResponseEntity.ok(importJobService.consultarProgreso(jobId));
+    }
+
+    @DeleteMapping("/importar-csv/progreso/{jobId}")
+    public ResponseEntity<Void> cerrarImportacionCsv(@PathVariable String jobId) {
+        importJobService.eliminarJob(jobId);
+        return ResponseEntity.noContent().build();
     }
 
     private UUID adminId() {
