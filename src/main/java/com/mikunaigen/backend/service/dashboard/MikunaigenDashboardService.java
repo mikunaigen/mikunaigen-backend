@@ -1,6 +1,7 @@
 package com.mikunaigen.backend.service.dashboard;
 
 import com.mikunaigen.backend.repository.sql.UserRepository;
+import com.mikunaigen.backend.service.IaModelosService;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -13,9 +14,11 @@ import java.util.Map;
 public class MikunaigenDashboardService {
 
     private final UserRepository userRepository;
+    private final IaModelosService iaModelosService;
 
-    public MikunaigenDashboardService(UserRepository userRepository) {
+    public MikunaigenDashboardService(UserRepository userRepository, IaModelosService iaModelosService) {
         this.userRepository = userRepository;
+        this.iaModelosService = iaModelosService;
     }
 
     public Map<String, Object> kpis(LocalDateTime desde, LocalDateTime hasta) {
@@ -48,6 +51,25 @@ public class MikunaigenDashboardService {
                 }
             }
         }
+        return out;
+    }
+
+    public Map<String, Object> prediccionInventario() {
+        Map<String, Object> out = new LinkedHashMap<>();
+        boolean disponible = iaModelosService.slotEfectivo(3);
+        out.put("disponible", disponible);
+        if (!disponible) {
+            out.put("items", List.of());
+            out.put("alertasCriticas", List.of());
+            out.put("heatmap", Map.of());
+            return out;
+        }
+        out.put("items", List.of(
+                Map.of("insumo", "Quinoa", "stockActual", 120, "prediccion7d", 95),
+                Map.of("insumo", "Camu camu", "stockActual", 45, "prediccion7d", 52)
+        ));
+        out.put("alertasCriticas", List.of("Camu camu: stock bajo en 7 días"));
+        out.put("heatmap", Map.of("Lunes", 12, "Martes", 18, "Miércoles", 9));
         return out;
     }
 

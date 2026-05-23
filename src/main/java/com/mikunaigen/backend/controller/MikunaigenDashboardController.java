@@ -27,4 +27,9 @@ public class MikunaigenDashboardController {
         LocalDateTime d1 = hasta != null ? hasta : LocalDateTime.now();
         return ResponseEntity.ok(dashboardService.kpis(d0, d1));
     }
+
+    @GetMapping("/prediccion-inventario")
+    public ResponseEntity<Map<String, Object>> prediccionInventario() {
+        return ResponseEntity.ok(dashboardService.prediccionInventario());
+    }
 }
