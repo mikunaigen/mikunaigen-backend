@@ -16,9 +16,9 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<Map<String, Object>> handleResponseStatusException(ResponseStatusException ex) {
-        log.error("Excepción controlada en API: Estado={}, Motivo={}", 
+        log.error("Excepción controlada en API: Estado={}, Motivo={}",
                 ex.getStatusCode(), ex.getReason(), ex);
-        
+
         return ResponseEntity
                 .status(ex.getStatusCode())
                 .body(Map.of(
@@ -31,7 +31,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleAllExceptions(Exception ex) {
         log.error("Excepción no controlada en el sistema", ex);
-        
+
         return ResponseEntity
                 .status(500)
                 .body(Map.of(
