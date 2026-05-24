@@ -1,5 +1,6 @@
 package com.mikunaigen.backend.service;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import java.time.DayOfWeek;
@@ -16,8 +17,8 @@ public class ContextoInteligenciaService {
             String segment
     ) {}
 
-    private static final String OPEN_METEO_URL =
-            "https://api.open-meteo.com/v1/forecast?latitude=-12.0686&longitude=-75.2102&current_weather=true";
+@Value("${app.open-meteo.url:https://api.open-meteo.com/v1/forecast?latitude=-12.0686&longitude=-75.2102&current_weather=true}")
+    private String openMeteoUrl;
 
     public ContextoInteligencia contextoActual() {
         LocalDateTime now = LocalDateTime.now();
@@ -26,7 +27,7 @@ public class ContextoInteligenciaService {
 
         try {
             RestTemplate restTemplate = new RestTemplate();
-            Map<String, Object> response = restTemplate.getForObject(OPEN_METEO_URL, Map.class);
+            Map<String, Object> response = restTemplate.getForObject(openMeteoUrl, Map.class);
             
             if (response != null && response.containsKey("current_weather")) {
                 Map<String, Object> cw = (Map<String, Object>) response.get("current_weather");

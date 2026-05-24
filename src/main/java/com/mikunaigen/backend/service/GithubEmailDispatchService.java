@@ -32,6 +32,9 @@ public class GithubEmailDispatchService {
     @Value("${app.github.repo:}")
     private String githubRepo;
 
+    @Value("${app.github.api-base-url:https://api.github.com}")
+    private String githubApiBaseUrl;
+
     @Value("${app.email.dispatch.key-hex:}")
     private String dispatchKeyHex;
 
@@ -106,7 +109,8 @@ public class GithubEmailDispatchService {
             headers.set("Accept", "application/vnd.github.v3+json");
             headers.set("Content-Type", "application/json");
             HttpEntity<Map<String, Object>> request = new HttpEntity<>(payload, headers);
-            String url = String.format("https://api.github.com/repos/%s/%s/dispatches", githubOwner, githubRepo);
+            String url = String.format("%s/repos/%s/%s/dispatches",
+                    normalizeBaseUrl(githubApiBaseUrl), githubOwner, githubRepo);
             restTemplate.postForEntity(url, request, String.class);
             log.info("Email dispatch {} encolado en GitHub", trackingId);
         } catch (EmailDispatchException e) {
