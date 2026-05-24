@@ -75,6 +75,8 @@ public class RegistroTelegramService {
 
     @Transactional
     public ResponseEntity<?> registrarPendiente(Map<String, String> data) {
+        String nombres = trimToNull(data.get("nombres"));
+        String apellidos = trimToNull(data.get("apellidos"));
         String fullName = trimToNull(data.get("fullName"));
         String dni = trimToNull(data.get("dni"));
         String phone = trimToNull(data.get("phone"));
@@ -121,7 +123,12 @@ public class RegistroTelegramService {
             user.setEmail(email);
         }
 
-        user.setFullName(fullName);
+        if (nombres != null && apellidos != null) {
+            user.setNombres(nombres);
+            user.setApellidos(apellidos);
+            } else {
+            user.setFullName(fullName);
+        }
         user.setDni(dni);
         user.setPhone(phone);
         user.setPassword(passwordEncoder.encode(password));
