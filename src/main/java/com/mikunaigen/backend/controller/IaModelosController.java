@@ -1,5 +1,6 @@
 package com.mikunaigen.backend.controller;
 
+import com.mikunaigen.backend.service.EntrenamientoIaService;
 import com.mikunaigen.backend.service.IaModelosService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -14,9 +15,11 @@ import java.util.Map;
 public class IaModelosController {
 
     private final IaModelosService iaModelosService;
+    private final EntrenamientoIaService entrenamientoIaService;
 
-    public IaModelosController(IaModelosService iaModelosService) {
+    public IaModelosController(IaModelosService iaModelosService, EntrenamientoIaService entrenamientoIaService) {
         this.iaModelosService = iaModelosService;
+        this.entrenamientoIaService = entrenamientoIaService;
     }
 
     @GetMapping("/estado")
@@ -97,5 +100,21 @@ public class IaModelosController {
     @PreAuthorize("hasRole('administrador')")
     public ResponseEntity<Map<String, Object>> estadoDataset(@PathVariable String jobId) {
         return ResponseEntity.ok(iaModelosService.estadoDatasetJob(jobId));
+    }
+
+    @PostMapping("/entrenamiento/iniciar")
+    @PreAuthorize("hasRole('administrador')")
+    public ResponseEntity<?> iniciarEntrenamiento() {
+        try {
+            return ResponseEntity.ok(entrenamientoIaService.iniciarEntrenamiento());
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(409).body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/entrenamiento/estado")
+    @PreAuthorize("hasRole('administrador')")
+    public ResponseEntity<Map<String, Object>> estadoEntrenamiento() {
+        return ResponseEntity.ok(entrenamientoIaService.estadoEntrenamiento());
     }
 }

@@ -3,6 +3,7 @@ package com.mikunaigen.backend.model.sql;
 import jakarta.persistence.*;
 import lombok.Data;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
@@ -63,4 +64,49 @@ public class ConfiguracionIa {
 
     @Column(name = "actualizado_en")
     private LocalDateTime actualizadoEn = LocalDateTime.now();
+
+    @Column(name = "entrenamiento_estado", length = 40)
+    private String entrenamientoEstado = "IDLE";
+
+    @Column(name = "entrenamiento_job_id", length = 64)
+    private String entrenamientoJobId;
+
+    @Column(name = "entrenamiento_epoca")
+    private Integer entrenamientoEpoca;
+
+    @Column(name = "entrenamiento_epocas_totales")
+    private Integer entrenamientoEpocasTotales = 50;
+
+    @Column(name = "entrenamiento_error_train", precision = 12, scale = 6)
+    private BigDecimal entrenamientoErrorTrain;
+
+    @Column(name = "entrenamiento_error_val", precision = 12, scale = 6)
+    private BigDecimal entrenamientoErrorVal;
+
+    @Column(name = "entrenamiento_loss_train", precision = 12, scale = 6)
+    private BigDecimal entrenamientoLossTrain;
+
+    @Column(name = "entrenamiento_loss_val", precision = 12, scale = 6)
+    private BigDecimal entrenamientoLossVal;
+
+    @Column(name = "entrenamiento_mensaje", length = 500)
+    private String entrenamientoMensaje;
+
+    @Column(name = "entrenamiento_dataset_b2_key", length = 200)
+    private String entrenamientoDatasetB2Key;
+
+    @Column(name = "formulacion_modelo_b2_key", length = 300)
+    private String formulacionModeloB2Key;
+
+    @Column(name = "formulacion_escalador_b2_key", length = 300)
+    private String formulacionEscaladorB2Key;
+
+    @Column(name = "entrenamiento_curva_json", columnDefinition = "TEXT")
+    private String entrenamientoCurvaJson;
+
+    @Column(name = "entrenamiento_iniciado_en")
+    private LocalDateTime entrenamientoIniciadoEn;
+
+    @Column(name = "entrenamiento_finalizado_en")
+    private LocalDateTime entrenamientoFinalizadoEn;
 }

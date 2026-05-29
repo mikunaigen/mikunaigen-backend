@@ -84,7 +84,9 @@ public class SecurityConfig {
                         "/api/webhooks/backup-cron",
                         "/api/webhooks/email-dispatch",
                         "/api/webhooks/maintenance-end",
-                        "/api/webhooks/maintenance-status"
+                        "/api/webhooks/maintenance-status",
+                        "/api/webhooks/entrenamiento-dataset",
+                        "/api/webhooks/kaggle-entrenamiento"
                 ).permitAll()
                 .requestMatchers("/api/admin/**").hasRole("administrador")
                 .requestMatchers("/api/**").authenticated()
