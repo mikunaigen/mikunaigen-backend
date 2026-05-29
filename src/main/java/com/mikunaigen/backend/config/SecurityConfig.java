@@ -86,7 +86,6 @@ public class SecurityConfig {
                         "/api/webhooks/maintenance-end",
                         "/api/webhooks/maintenance-status"
                 ).permitAll()
-                .requestMatchers("/api/auth/crear-empleado").hasRole("administrador")
                 .requestMatchers("/api/admin/**").hasRole("administrador")
                 .requestMatchers("/api/**").authenticated()
                 .anyRequest().permitAll()

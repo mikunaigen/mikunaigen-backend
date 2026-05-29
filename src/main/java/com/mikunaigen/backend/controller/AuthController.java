@@ -259,36 +259,6 @@ public class AuthController {
         ));
     }
 
-    @PostMapping("/crear-empleado")
-    public ResponseEntity<?> crearEmpleado(@RequestBody Map<String, String> data) {
-        String email = trimToNull(data.get("email"));
-        String dni = trimToNull(data.get("dni"));
-        String phone = trimToNull(data.get("phone"));
-        String fullName = trimToNull(data.get("fullName"));
-        String address = trimToNull(data.get("address"));
-
-        if (email == null || dni == null || phone == null || fullName == null || address == null) {
-            return ResponseEntity.badRequest().body(Map.of("message", "Todos los campos son obligatorios."));
-        }
-
-        ResponseEntity<?> duplicado = validarDuplicadosUsuario(email, dni, phone, fullName);
-        if (duplicado != null) return duplicado;
-
-        User user = new User();
-        user.setEmail(email);
-        user.setDni(dni);
-        user.setFullName(fullName);
-        user.setPhone(phone);
-        user.setAddress(address);
-        user.setRole(roleRepo.findByName(data.get("role")).orElseThrow());
-        
-        user.setPassword(passwordEncoder.encode(UUID.randomUUID().toString())); 
-        user.setFirstLogin(true);
-
-        userRepo.save(user);
-        return ResponseEntity.ok(Map.of("message", "Empleado creado. Debe iniciar sesión con su correo para activar la cuenta."));
-    }
-
     @PostMapping("/enviar-codigo-empleado")
     public ResponseEntity<?> enviarCodigoEmpleado(@RequestBody Map<String, String> request) {
         String email = request.get("email");
