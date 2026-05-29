@@ -58,6 +58,18 @@ public class EntrenamientoDatasetGithubService {
     @Value("${app.public.api.base-url}")
     private String publicApiBaseUrl;
 
+    @Value("${app.kaggle.api.token:}")
+    private String kaggleApiToken;
+
+    @Value("${app.kaggle.kernel.propietario:}")
+    private String kagglePropietario;
+
+    @Value("${app.kaggle.kernel.slug:}")
+    private String kaggleSlug;
+
+    @Value("${app.kaggle.webhook.secret:}")
+    private String kaggleWebhookSecret;
+
     public String claveDatasetHoy() {
         return FECHA_DATASET.format(ZonedDateTime.now(ZONA_LIMA)) + "_dataset.zip";
     }
@@ -83,6 +95,13 @@ public class EntrenamientoDatasetGithubService {
         b2.put("app_key", appKey);
         b2.put("endpoint", endpoint);
 
+        Map<String, Object> kaggle = new HashMap<>();
+        kaggle.put("token", kaggleApiToken);
+        kaggle.put("propietario", kagglePropietario);
+        kaggle.put("slug", kaggleSlug);
+        kaggle.put("webhook_url", publicApiBaseUrl.replaceAll("/$", "") + "/api/webhooks/kaggle-entrenamiento");
+        kaggle.put("webhook_secret", kaggleWebhookSecret);
+
         Map<String, Object> clientPayload = new HashMap<>();
         clientPayload.put("job_id", jobId);
         clientPayload.put("dataset_key", datasetKey);
@@ -90,6 +109,7 @@ public class EntrenamientoDatasetGithubService {
         clientPayload.put("notify_secret", notifySecret);
         clientPayload.put("pg", pg);
         clientPayload.put("b2", b2);
+        clientPayload.put("kaggle", kaggle);
 
         Map<String, Object> payload = new HashMap<>();
         payload.put("event_type", "trigger-entrenamiento-dataset");
