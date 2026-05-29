@@ -38,9 +38,10 @@ public class EntrenamientoWebhookController {
         if (!entrenamientoIaService.verificarSecretoKaggle(firma)) {
             return ResponseEntity.status(401).body(Map.of("ok", false));
         }
+        boolean shouldCancel = false;
         if (body != null) {
-            entrenamientoIaService.procesarWebhookKaggle(body);
+            shouldCancel = entrenamientoIaService.procesarWebhookKaggle(body);
         }
-        return ResponseEntity.ok(Map.of("ok", true));
+        return ResponseEntity.ok(Map.of("ok", true, "should_cancel", shouldCancel));
     }
 }

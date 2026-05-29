@@ -138,23 +138,22 @@ public class EntrenamientoIaService {
     }
 
     @Transactional
-    public void procesarWebhookKaggle(Map<String, Object> body) {
+    public boolean procesarWebhookKaggle(Map<String, Object> body) {
         String status = str(body.get("status"));
         ConfiguracionIa c = getOrCreate();
         String jobId = c.getEntrenamientoJobId();
+        if (jobId == null || jobId.isBlank()) {
+            return false;
+        }
 
-        if ("CANCELLED".equalsIgnoreCase(status)) {
+        if ("CANCEL_PENDING".equalsIgnoreCase(c.getEntrenamientoEstado())) {
             c.setEntrenamientoEstado(ESTADO_ERROR);
             c.setEntrenamientoMensaje("Entrenamiento cancelado por el usuario.");
             c.setEntrenamientoFinalizadoEn(LocalDateTime.now());
             c.setActualizadoEn(LocalDateTime.now());
             repo.save(c);
             push.publicar(estadoDesde(c));
-            return;
-        }
-
-        if (jobId == null || jobId.isBlank()) {
-            return;
+            return true; 
         }
 
         if ("IN_PROGRESS".equalsIgnoreCase(status)) {
@@ -177,7 +176,7 @@ public class EntrenamientoIaService {
             c.setActualizadoEn(LocalDateTime.now());
             repo.save(c);
             push.publicar(estadoDesde(c));
-            return;
+            return false;
         }
 
         if ("SUCCESS".equalsIgnoreCase(status)) {
@@ -201,7 +200,7 @@ public class EntrenamientoIaService {
             c.setActualizadoEn(LocalDateTime.now());
             repo.save(c);
             push.publicar(estadoDesde(c));
-            return;
+            return false;
         }
 
         if ("OVERFITTING_WARNING".equalsIgnoreCase(status)) {
@@ -211,13 +210,15 @@ public class EntrenamientoIaService {
             c.setActualizadoEn(LocalDateTime.now());
             repo.save(c);
             push.publicar(estadoDesde(c));
-            return;
+            return false;
         }
 
         if ("FAILED".equalsIgnoreCase(status)) {
             String mensaje = str(body.get("message"));
             marcarError(jobId, mensaje.isBlank() ? "El entrenamiento en Kaggle falló." : mensaje);
         }
+        
+        return false;
     }
 
     @Transactional(readOnly = true)
@@ -234,25 +235,12 @@ public class EntrenamientoIaService {
             throw new IllegalStateException("No hay ningún entrenamiento activo para cancelar.");
         }
         
-        String jobId = c.getEntrenamientoJobId();
-        
-        c.setEntrenamientoEstado(ESTADO_ERROR);
-        c.setEntrenamientoMensaje("Cancelando proceso y liberando recursos...");
-        c.setEntrenamientoFinalizadoEn(LocalDateTime.now());
+        c.setEntrenamientoEstado("CANCEL_PENDING");
+        c.setEntrenamientoMensaje("Solicitud de cancelación enviada. Se aplicará al terminar la época actual...");
         c.setActualizadoEn(LocalDateTime.now());
         repo.save(c);
 
-        Map<String, Object> estadoMap = estadoDesde(c);
-        push.publicar(estadoMap);
-
-        try {
-            datasetGithub.despacharCancelacion(jobId);
-        } catch (Exception e) {
-            c.setEntrenamientoMensaje("Error al enviar comando de cancelación a GitHub: " + e.getMessage());
-            repo.save(c);
-            push.publicar(estadoDesde(c));
-        }
-
+        push.publicar(estadoDesde(c));
         return estadoDesde(c);
     }
 
