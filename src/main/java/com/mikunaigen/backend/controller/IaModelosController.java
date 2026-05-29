@@ -117,4 +117,14 @@ public class IaModelosController {
     public ResponseEntity<Map<String, Object>> estadoEntrenamiento() {
         return ResponseEntity.ok(entrenamientoIaService.estadoEntrenamiento());
     }
+
+    @PostMapping("/entrenamiento/cancelar")
+    @PreAuthorize("hasRole('administrador')")
+    public ResponseEntity<?> cancelarEntrenamiento() {
+        try {
+            return ResponseEntity.ok(entrenamientoIaService.cancelarEntrenamiento());
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("message", e.getMessage()));
+        }
+    }
 }

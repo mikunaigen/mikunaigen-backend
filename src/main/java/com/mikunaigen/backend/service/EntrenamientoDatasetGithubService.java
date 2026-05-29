@@ -124,6 +124,36 @@ public class EntrenamientoDatasetGithubService {
         rest.postForEntity(url, new HttpEntity<>(payload, headers), String.class);
     }
 
+    public void despacharCancelacion(String jobId) {
+        if (githubToken == null || githubToken.isBlank() || githubOwner.isBlank() || githubRepo.isBlank()) {
+            throw new IllegalStateException("Credenciales de GitHub no configuradas.");
+        }
+        String notifyUrl = publicApiBaseUrl.replaceAll("/$", "") + "/api/webhooks/kaggle-entrenamiento";
+
+        Map<String, Object> kaggle = new HashMap<>();
+        kaggle.put("token", kaggleApiToken);
+        kaggle.put("propietario", kagglePropietario);
+        kaggle.put("slug", kaggleSlug);
+        kaggle.put("webhook_url", notifyUrl);
+        kaggle.put("webhook_secret", kaggleWebhookSecret);
+
+        Map<String, Object> clientPayload = new HashMap<>();
+        clientPayload.put("job_id", jobId);
+        clientPayload.put("kaggle", kaggle);
+
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("event_type", "cancelar-entrenamiento");
+        payload.put("client_payload", clientPayload);
+
+        RestTemplate rest = new RestTemplate();
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Authorization", "Bearer " + githubToken);
+        headers.set("Accept", "application/vnd.github.v3+json");
+
+        String url = normalizeGithubBase(githubApiBaseUrl) + "/repos/" + githubOwner + "/" + githubRepo + "/dispatches";
+        rest.postForEntity(url, new HttpEntity<>(payload, headers), String.class);
+    }
+
     private static String normalizeGithubBase(String base) {
         if (base == null || base.isBlank()) {
             return "https://api.github.com";

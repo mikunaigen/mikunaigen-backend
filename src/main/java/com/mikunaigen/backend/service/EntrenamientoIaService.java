@@ -142,6 +142,17 @@ public class EntrenamientoIaService {
         String status = str(body.get("status"));
         ConfiguracionIa c = getOrCreate();
         String jobId = c.getEntrenamientoJobId();
+
+        if ("CANCELLED".equalsIgnoreCase(status)) {
+            c.setEntrenamientoEstado(ESTADO_ERROR);
+            c.setEntrenamientoMensaje("Entrenamiento cancelado por el usuario.");
+            c.setEntrenamientoFinalizadoEn(LocalDateTime.now());
+            c.setActualizadoEn(LocalDateTime.now());
+            repo.save(c);
+            push.publicar(estadoDesde(c));
+            return;
+        }
+
         if (jobId == null || jobId.isBlank()) {
             return;
         }
@@ -212,6 +223,37 @@ public class EntrenamientoIaService {
     @Transactional(readOnly = true)
     public Map<String, Object> estadoEntrenamiento() {
         return estadoDesde(getOrCreate());
+    }
+
+    @Transactional
+    public Map<String, Object> cancelarEntrenamiento() {
+        ConfiguracionIa c = getOrCreate();
+        String estadoActual = normalizarEstado(c.getEntrenamientoEstado());
+        
+        if (!ESTADOS_OCUPADOS.contains(estadoActual) && !ESTADO_ENTRENANDO.equals(estadoActual)) {
+            throw new IllegalStateException("No hay ningún entrenamiento activo para cancelar.");
+        }
+        
+        String jobId = c.getEntrenamientoJobId();
+        
+        c.setEntrenamientoEstado(ESTADO_ERROR);
+        c.setEntrenamientoMensaje("Cancelando proceso y liberando recursos...");
+        c.setEntrenamientoFinalizadoEn(LocalDateTime.now());
+        c.setActualizadoEn(LocalDateTime.now());
+        repo.save(c);
+
+        Map<String, Object> estadoMap = estadoDesde(c);
+        push.publicar(estadoMap);
+
+        try {
+            datasetGithub.despacharCancelacion(jobId);
+        } catch (Exception e) {
+            c.setEntrenamientoMensaje("Error al enviar comando de cancelación a GitHub: " + e.getMessage());
+            repo.save(c);
+            push.publicar(estadoDesde(c));
+        }
+
+        return estadoDesde(c);
     }
 
     private void marcarError(String jobId, String mensaje) {
