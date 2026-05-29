@@ -148,7 +148,7 @@ public class EntrenamientoIaService {
 
         if ("CANCEL_PENDING".equalsIgnoreCase(c.getEntrenamientoEstado())) {
             c.setEntrenamientoEstado(ESTADO_ERROR);
-            c.setEntrenamientoMensaje("Entrenamiento cancelado por el usuario.");
+            c.setEntrenamientoMensaje("Entrenamiento cancelado correctamente.");
             c.setEntrenamientoFinalizadoEn(LocalDateTime.now());
             c.setActualizadoEn(LocalDateTime.now());
             repo.save(c);
