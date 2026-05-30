@@ -71,6 +71,21 @@ public class FormulacionInferenciaService {
     private final HuggingFaceInferenciaClient hfClient;
     private final ObjectMapper objectMapper;
     private final ParametrizacionFormulacionService parametrizacionFormulacionService;
+    private final LimitesNormativosService limitesNormativosService;
+
+    private static final Map<String, String> ETIQUETAS_SEMAFORO = Map.of(
+            "sodio_mg", "Sodio",
+            "grasa_total_g", "Grasa saturada (aprox.)",
+            "carbohidratos_disponibles_g", "Azúcares (aprox.)",
+            "energia_kcal", "Energía / calorías"
+    );
+
+    private static final Map<String, String> OCTOGONOS_LEY = Map.of(
+            "sodio_mg", "Octógono: Alto en sodio",
+            "grasa_total_g", "Octógono: Alto en grasas saturadas",
+            "carbohidratos_disponibles_g", "Octógono: Alto en azúcares",
+            "energia_kcal", "Octógono: Alto en calorías"
+    );
 
     public FormulacionInferenciaService(
             ConfiguracionIaRepository configuracionIaRepo,
@@ -86,7 +101,8 @@ public class FormulacionInferenciaService {
             B2PresignedUrlService presignedUrlService,
             HuggingFaceInferenciaClient hfClient,
             ObjectMapper objectMapper,
-            ParametrizacionFormulacionService parametrizacionFormulacionService
+            ParametrizacionFormulacionService parametrizacionFormulacionService,
+            LimitesNormativosService limitesNormativosService
     ) {
         this.configuracionIaRepo = configuracionIaRepo;
         this.preferenciasRepo = preferenciasRepo;
@@ -102,6 +118,7 @@ public class FormulacionInferenciaService {
         this.hfClient = hfClient;
         this.objectMapper = objectMapper;
         this.parametrizacionFormulacionService = parametrizacionFormulacionService;
+        this.limitesNormativosService = limitesNormativosService;
     }
 
     @Transactional(readOnly = true)
@@ -300,6 +317,7 @@ public class FormulacionInferenciaService {
         if (pref.getPresupuestoMaximo() != null && cuotaService.normalizarRol(user).equals("estudiante") == false) {
             payloadHf.put("presupuesto_maximo", pref.getPresupuestoMaximo().doubleValue());
         }
+        payloadHf.put("normativas", limitesNormativosService.mapaNormativasParaInferencia());
 
         Map<String, Object> respuestaHf;
         try {
@@ -719,14 +737,7 @@ public class FormulacionInferenciaService {
     }
 
     private String verificarCodexLocal(List<Double> perfil) {
-        Map<String, Double> limites = Map.of(
-                "sodio_mg", 2300.0,
-                "grasa_total_g", 35.0,
-                "energia_kcal", 600.0,
-                "hierro_mg", 45.0,
-                "zinc_mg", 40.0,
-                "vitamina_c_mg", 2000.0
-        );
+        Map<String, Double> limites = limitesNormativosService.mapaLimitesCodex();
         for (int i = 0; i < ORDEN_PERFIL.size(); i++) {
             Double lim = limites.get(ORDEN_PERFIL.get(i));
             if (lim != null && perfil.get(i) > lim) {
@@ -737,11 +748,7 @@ public class FormulacionInferenciaService {
     }
 
     private Map<String, String> evaluarSemaforoLocal(List<Double> perfil) {
-        Map<String, Double> umbrales = Map.of(
-                "sodio_mg", 400.0,
-                "grasa_total_g", 6.0,
-                "carbohidratos_disponibles_g", 22.5
-        );
+        Map<String, Double> umbrales = limitesNormativosService.mapaUmbralesLey30021();
         Map<String, String> out = new LinkedHashMap<>();
         for (int i = 0; i < ORDEN_PERFIL.size(); i++) {
             String col = ORDEN_PERFIL.get(i);
@@ -758,20 +765,11 @@ public class FormulacionInferenciaService {
     private Map<String, Object> evaluarSemaforoDetalleLocal(List<Double> perfil) {
         Map<String, String> colores = evaluarSemaforoLocal(perfil);
         Map<String, Object> detalle = new LinkedHashMap<>();
-        Map<String, Double> umbrales = Map.of(
-                "sodio_mg", 400.0,
-                "grasa_total_g", 6.0,
-                "carbohidratos_disponibles_g", 22.5
-        );
-        Map<String, String> etiquetas = Map.of(
-                "sodio_mg", "Sodio",
-                "grasa_total_g", "Grasa saturada (aprox.)",
-                "carbohidratos_disponibles_g", "Azúcares (aprox.)"
-        );
+        Map<String, Double> umbrales = limitesNormativosService.mapaUmbralesLey30021();
         for (Map.Entry<String, String> e : colores.entrySet()) {
             int idx = ORDEN_PERFIL.indexOf(e.getKey());
             Map<String, Object> item = new LinkedHashMap<>();
-            item.put("etiqueta", etiquetas.getOrDefault(e.getKey(), e.getKey()));
+            item.put("etiqueta", ETIQUETAS_SEMAFORO.getOrDefault(e.getKey(), e.getKey()));
             item.put("color", e.getValue());
             item.put("valor", perfil.get(idx));
             item.put("umbral", umbrales.get(e.getKey()));
@@ -841,24 +839,8 @@ public class FormulacionInferenciaService {
             return extendido;
         }
 
-        Map<String, Double> limitesCodex = Map.of(
-                "sodio_mg", 2300.0,
-                "grasa_total_g", 35.0,
-                "energia_kcal", 600.0,
-                "hierro_mg", 45.0,
-                "zinc_mg", 40.0,
-                "vitamina_c_mg", 2000.0
-        );
-        Map<String, Double> umbralesLey = Map.of(
-                "sodio_mg", 400.0,
-                "grasa_total_g", 6.0,
-                "carbohidratos_disponibles_g", 22.5
-        );
-        Map<String, String> octogonos = Map.of(
-                "sodio_mg", "Octógono: Alto en sodio",
-                "grasa_total_g", "Octógono: Alto en grasas saturadas",
-                "carbohidratos_disponibles_g", "Octógono: Alto en azúcares"
-        );
+        Map<String, Double> limitesCodex = limitesNormativosService.mapaLimitesCodex();
+        Map<String, Double> umbralesLey = limitesNormativosService.mapaUmbralesLey30021();
 
         List<Map<String, Object>> codex = new ArrayList<>();
         for (Map.Entry<String, Double> entry : limitesCodex.entrySet()) {
@@ -883,7 +865,7 @@ public class FormulacionInferenciaService {
             fila.put("logrado", logrado);
             fila.put("umbralLey", entry.getValue());
             fila.put("activaOctogono", logrado > entry.getValue());
-            fila.put("octogono", octogonos.get(entry.getKey()));
+            fila.put("octogono", OCTOGONOS_LEY.get(entry.getKey()));
             fila.put("referencia", "Ley N° 30021");
             ley.add(fila);
         }
