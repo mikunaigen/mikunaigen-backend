@@ -98,6 +98,7 @@ public class ParametrizacionFormulacionService {
         }
 
         guardarRestricciones(usuarioId, body, cap);
+        pref.setPreferenciasCompletadas(true);
         preferenciasRepo.save(pref);
 
         return Map.of(
@@ -265,6 +266,7 @@ public class ParametrizacionFormulacionService {
         m.put("ingredientesPriorizados", mapaRestricciones(usuarioId, TIPO_PRIORIZAR));
         m.put("mensajePresupuestoExcedido",
                 "No fue posible formular una receta dentro del límite indicado. Intenta aumentar el presupuesto máximo por kg.");
+        m.put("parametrizacionCompletada", pref.isPreferenciasCompletadas());
         return m;
     }
 
