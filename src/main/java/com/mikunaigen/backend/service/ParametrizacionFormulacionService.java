@@ -65,6 +65,12 @@ public class ParametrizacionFormulacionService {
         return out;
     }
 
+    @Transactional(readOnly = true)
+    public Map<String, Object> mapaParametrizacionUsuario(UUID usuarioId) {
+        PreferenciasUsuario pref = obtenerOCrearPreferencias(usuarioId);
+        return mapaParametrizacion(pref, usuarioId);
+    }
+
     @Transactional
     public Map<String, Object> guardar(UUID usuarioId, Map<String, Object> body) {
         User user = cargarUsuario(usuarioId);

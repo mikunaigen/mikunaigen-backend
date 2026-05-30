@@ -61,6 +61,9 @@ public interface InferenciaRecetaRepository extends JpaRepository<InferenciaRece
             UUID usuarioId, String sesionMarker
     );
 
+    Optional<InferenciaReceta> findFirstByUsuarioIdAndEstadoInOrderByFechaGeneracionDesc(
+            UUID usuarioId, List<String> estados);
+
     @Query(value = """
             SELECT i.* FROM inferencias_recetas i
             INNER JOIN usuarios u ON u.id = i.usuario_id

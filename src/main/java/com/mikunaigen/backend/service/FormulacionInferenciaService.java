@@ -70,6 +70,7 @@ public class FormulacionInferenciaService {
     private final B2PresignedUrlService presignedUrlService;
     private final HuggingFaceInferenciaClient hfClient;
     private final ObjectMapper objectMapper;
+    private final ParametrizacionFormulacionService parametrizacionFormulacionService;
 
     public FormulacionInferenciaService(
             ConfiguracionIaRepository configuracionIaRepo,
@@ -84,7 +85,8 @@ public class FormulacionInferenciaService {
             FormulacionCuotaService cuotaService,
             B2PresignedUrlService presignedUrlService,
             HuggingFaceInferenciaClient hfClient,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            ParametrizacionFormulacionService parametrizacionFormulacionService
     ) {
         this.configuracionIaRepo = configuracionIaRepo;
         this.preferenciasRepo = preferenciasRepo;
@@ -99,6 +101,7 @@ public class FormulacionInferenciaService {
         this.presignedUrlService = presignedUrlService;
         this.hfClient = hfClient;
         this.objectMapper = objectMapper;
+        this.parametrizacionFormulacionService = parametrizacionFormulacionService;
     }
 
     @Transactional(readOnly = true)
@@ -207,6 +210,31 @@ public class FormulacionInferenciaService {
         }
     }
 
+    @Transactional(readOnly = true)
+    public Map<String, Object> ultimaConfiguracionFormulacion(UUID usuarioId) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        Optional<InferenciaReceta> ultima = inferenciaRepo.findFirstByUsuarioIdAndEstadoInOrderByFechaGeneracionDesc(
+                usuarioId, List.of("generada", "guardada_historial"));
+        if (ultima.isEmpty()) {
+            out.put("disponible", false);
+            out.put("message", "No hay formulaciones anteriores registradas.");
+            return out;
+        }
+        InferenciaReceta inf = ultima.get();
+        Map<String, Object> input = inf.getInputParametros();
+        out.put("disponible", true);
+        out.put("fechaUltimaFormulacion", inf.getFechaGeneracion());
+        if (input != null && input.get("objetivo") != null) {
+            out.put("objetivo", input.get("objetivo"));
+        }
+        if (input != null && input.get("parametrizacion") != null) {
+            out.put("parametrizacion", input.get("parametrizacion"));
+        } else {
+            out.put("parametrizacion", parametrizacionFormulacionService.mapaParametrizacionUsuario(usuarioId));
+        }
+        return out;
+    }
+
     @Transactional
     public Map<String, Object> ejecutar(UUID usuarioId, Map<String, Object> body) {
         verificarDescargoAceptado(usuarioId);
@@ -292,6 +320,7 @@ public class FormulacionInferenciaService {
         inputBase.put("hashParametros", hash);
         inputBase.put("objetivo", objetivo);
         inputBase.put("cabezas", cabezas);
+        inputBase.put("parametrizacion", parametrizacionFormulacionService.mapaParametrizacionUsuario(usuarioId));
         inputBase.put("modeloB2Key", cfg.getFormulacionModeloB2Key());
         inputBase.put("escaladorB2Key", cfg.getFormulacionEscaladorB2Key());
 

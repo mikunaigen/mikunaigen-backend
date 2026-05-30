@@ -44,6 +44,11 @@ public class FormulacionInferenciaController {
         return ResponseEntity.ok(inferenciaService.aceptarDescargo(usuarioIdSinDescargo()));
     }
 
+    @GetMapping("/ultima-configuracion")
+    public ResponseEntity<Map<String, Object>> ultimaConfiguracion() {
+        return ResponseEntity.ok(inferenciaService.ultimaConfiguracionFormulacion(usuarioId()));
+    }
+
     @PostMapping("/ejecutar")
     public ResponseEntity<?> ejecutar(@RequestBody Map<String, Object> body) {
         try {
