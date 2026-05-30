@@ -1,5 +1,6 @@
 package com.mikunaigen.backend.service.dashboard;
 
+import com.mikunaigen.backend.repository.sql.CalificacionRecetaRepository;
 import com.mikunaigen.backend.repository.sql.UserRepository;
 import com.mikunaigen.backend.service.IaModelosService;
 import org.springframework.stereotype.Service;
@@ -8,6 +9,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 @Service
@@ -15,10 +17,16 @@ public class MikunaigenDashboardService {
 
     private final UserRepository userRepository;
     private final IaModelosService iaModelosService;
+    private final CalificacionRecetaRepository calificacionRecetaRepository;
 
-    public MikunaigenDashboardService(UserRepository userRepository, IaModelosService iaModelosService) {
+    public MikunaigenDashboardService(
+            UserRepository userRepository,
+            IaModelosService iaModelosService,
+            CalificacionRecetaRepository calificacionRecetaRepository
+    ) {
         this.userRepository = userRepository;
         this.iaModelosService = iaModelosService;
+        this.calificacionRecetaRepository = calificacionRecetaRepository;
     }
 
     public Map<String, Object> kpis(LocalDateTime desde, LocalDateTime hasta) {
@@ -32,7 +40,11 @@ public class MikunaigenDashboardService {
         items.add(kpi("Ahorro de Tiempo al Usuario", "32 min", "tiempo manual - tiempo plataforma", "up"));
         items.add(kpi("Tasa de Nuevos Productos", "12%", "recetas nuevas / total", "up"));
         items.add(kpi("Precisión del Modelo", "96.2%", "1 - error_validacion", "up"));
-        items.add(kpi("Satisfacción de los Usuarios", "4.3/5", "promedio estrellas", "up"));
+        double promedioEstrellas = calificacionRecetaRepository.promedioEstrellas();
+        String satisfaccion = promedioEstrellas > 0
+                ? String.format(Locale.US, "%.1f/5", promedioEstrellas)
+                : "—";
+        items.add(kpi("Satisfacción de los Usuarios", satisfaccion, "promedio estrellas", "up"));
 
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("desde", desde);

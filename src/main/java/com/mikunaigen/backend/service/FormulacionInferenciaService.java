@@ -63,6 +63,7 @@ public class FormulacionInferenciaService {
     private final AlimentoDatasetRepository alimentoRepo;
     private final InferenciaRecetaRepository inferenciaRepo;
     private final ComposicionRecetaRepository composicionRepo;
+    private final CalificacionRecetaRepository calificacionRepo;
     private final UserRepository userRepo;
     private final ObjetivoNutricionalService objetivoService;
     private final FormulacionCuotaService cuotaService;
@@ -77,6 +78,7 @@ public class FormulacionInferenciaService {
             AlimentoDatasetRepository alimentoRepo,
             InferenciaRecetaRepository inferenciaRepo,
             ComposicionRecetaRepository composicionRepo,
+            CalificacionRecetaRepository calificacionRepo,
             UserRepository userRepo,
             ObjetivoNutricionalService objetivoService,
             FormulacionCuotaService cuotaService,
@@ -90,6 +92,7 @@ public class FormulacionInferenciaService {
         this.alimentoRepo = alimentoRepo;
         this.inferenciaRepo = inferenciaRepo;
         this.composicionRepo = composicionRepo;
+        this.calificacionRepo = calificacionRepo;
         this.userRepo = userRepo;
         this.objetivoService = objetivoService;
         this.cuotaService = cuotaService;
@@ -113,11 +116,100 @@ public class FormulacionInferenciaService {
                 : "No hay modelo de generación de recetas de superalimentos disponible");
         out.put("cuota", cuotaService.estadoCuota(user));
         out.put("rol", cuotaService.normalizarRol(user));
+        out.put("descargoAceptado", user.isAceptoDescargo());
         return out;
     }
 
     @Transactional
+    public Map<String, Object> aceptarDescargo(UUID usuarioId) {
+        User user = cargarUsuario(usuarioId);
+        user.setAceptoDescargo(true);
+        user.setActualizadoEn(LocalDateTime.now());
+        userRepo.save(user);
+        return Map.of("message", "Descargo de responsabilidad aceptado.", "descargoAceptado", true);
+    }
+
+    @Transactional
+    public Map<String, Object> calificarReceta(UUID usuarioId, UUID inferenciaId, Map<String, Object> body) {
+        verificarDescargoAceptado(usuarioId);
+        InferenciaReceta inf = inferenciaRepo.findById(inferenciaId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Receta no encontrada."));
+        if (!inf.getUsuarioId().equals(usuarioId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No autorizado.");
+        }
+        if (!"generada".equals(inf.getEstado()) && !"guardada_historial".equals(inf.getEstado())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Solo se pueden calificar recetas generadas.");
+        }
+        if (calificacionRepo.existsByInferenciaId(inferenciaId)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Esta receta ya fue calificada.");
+        }
+
+        int estrellas = parseEstrellas(body.get("estrellas"));
+        if (estrellas < 1 || estrellas > 5) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Debes seleccionar entre 1 y 5 estrellas.");
+        }
+
+        String comentario = body.get("comentario") != null ? String.valueOf(body.get("comentario")).trim() : "";
+        if (comentario.length() > 500) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El comentario no puede superar 500 caracteres.");
+        }
+
+        CalificacionReceta cal = new CalificacionReceta();
+        cal.setInferenciaId(inferenciaId);
+        cal.setUsuarioId(usuarioId);
+        cal.setEstrellas(estrellas);
+        cal.setComentario(comentario.isEmpty() ? null : comentario);
+        calificacionRepo.save(cal);
+
+        return Map.of(
+                "message", "Gracias por su calificación. Tu opinión ayuda a mejorar el modelo.",
+                "calificada", true,
+                "estrellas", estrellas
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> estadoCalificacion(UUID usuarioId, UUID inferenciaId) {
+        InferenciaReceta inf = inferenciaRepo.findById(inferenciaId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Receta no encontrada."));
+        if (!inf.getUsuarioId().equals(usuarioId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No autorizado.");
+        }
+        Optional<CalificacionReceta> cal = calificacionRepo.findByInferenciaId(inferenciaId);
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("calificada", cal.isPresent());
+        cal.ifPresent(c -> {
+            out.put("estrellas", c.getEstrellas());
+            out.put("comentario", c.getComentario());
+        });
+        return out;
+    }
+
+    private void verificarDescargoAceptado(UUID usuarioId) {
+        User user = cargarUsuario(usuarioId);
+        if (!user.isAceptoDescargo()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Debes aceptar el descargo de responsabilidad antes de usar el módulo de formulación.");
+        }
+    }
+
+    private int parseEstrellas(Object raw) {
+        if (raw instanceof Number n) {
+            return n.intValue();
+        }
+        if (raw == null) {
+            return 0;
+        }
+        try {
+            return Integer.parseInt(String.valueOf(raw));
+        } catch (NumberFormatException ex) {
+            return 0;
+        }
+    }
+
+    @Transactional
     public Map<String, Object> ejecutar(UUID usuarioId, Map<String, Object> body) {
+        verificarDescargoAceptado(usuarioId);
         User user = cargarUsuario(usuarioId);
         ConfiguracionIa cfg = configuracionActual();
         if (cfg == null || !cfg.isIaActiva()
@@ -231,7 +323,8 @@ public class FormulacionInferenciaService {
                     guardadas++;
                 } else {
                     ent.setSuperoLimiteSeguridad(true);
-                    ent.setComponenteInfractor(str(alt.get("nutriente_infractor")));
+                    ent.setComponenteInfractor(truncar(str(alt.get("nutriente_infractor")), 50));
+                    ent.setValorInfractor(decimal(alt.get("valor_infractor")));
                     inferenciaRepo.save(ent);
                 }
             }
@@ -703,6 +796,11 @@ public class FormulacionInferenciaService {
                 m.put("semaforoExtendido", construirSemaforoExtendido(ent.getOutputNutricionalLogrado()));
             }
         }
+        calificacionRepo.findByInferenciaId(ent.getId()).ifPresentOrElse(cal -> {
+            m.put("calificada", true);
+            m.put("calificacionEstrellas", cal.getEstrellas());
+            m.put("calificacionComentario", cal.getComentario());
+        }, () -> m.put("calificada", false));
         return m;
     }
 
@@ -959,6 +1057,13 @@ public class FormulacionInferenciaService {
 
     private static String str(Object o) {
         return o != null ? String.valueOf(o).trim() : "";
+    }
+
+    private static String truncar(String s, int max) {
+        if (s == null || s.length() <= max) {
+            return s;
+        }
+        return s.substring(0, max);
     }
 
     private static BigDecimal decimal(Object o) {

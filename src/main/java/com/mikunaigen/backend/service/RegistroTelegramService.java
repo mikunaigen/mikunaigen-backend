@@ -90,9 +90,6 @@ public class RegistroTelegramService {
         if (!parseBoolean(data.get("aceptoTerminos"))) {
             return ResponseEntity.badRequest().body(Map.of("message", "Debes aceptar los términos y condiciones de uso."));
         }
-        if (!parseBoolean(data.get("aceptoDescargo"))) {
-            return ResponseEntity.badRequest().body(Map.of("message", "Debes aceptar el descargo de responsabilidad."));
-        }
 
         if (!password.matches("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@!¡¿?#$%/&])[A-Za-z\\d@!¡¿?#$%/&]{8,}$")) {
             return ResponseEntity.badRequest().body(Map.of("message", "La contraseña no cumple los requisitos de seguridad."));
@@ -133,7 +130,7 @@ public class RegistroTelegramService {
         user.setPhone(phone);
         user.setPassword(passwordEncoder.encode(password));
         user.setAceptoTerminos(true);
-        user.setAceptoDescargo(true);
+        user.setAceptoDescargo(false);
         user.setEstado("pendiente");
         user.setTelegramId(null);
         user.setFirstLogin(false);

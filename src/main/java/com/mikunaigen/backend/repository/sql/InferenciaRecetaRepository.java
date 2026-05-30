@@ -60,4 +60,41 @@ public interface InferenciaRecetaRepository extends JpaRepository<InferenciaRece
     List<InferenciaReceta> findByUsuarioIdAndInputParametrosContainingOrderByFechaGeneracionDesc(
             UUID usuarioId, String sesionMarker
     );
+
+    @Query(value = """
+            SELECT i.* FROM inferencias_recetas i
+            INNER JOIN usuarios u ON u.id = i.usuario_id
+            WHERE i.estado = 'descartada_seguridad'
+            AND (CAST(:desde AS timestamp) IS NULL OR i.fecha_generacion >= :desde)
+            AND (CAST(:hasta AS timestamp) IS NULL OR i.fecha_generacion <= :hasta)
+            AND (:componente IS NULL OR LOWER(COALESCE(i.componente_infractor, '')) LIKE LOWER(CONCAT('%', :componente, '%')))
+            AND (:usuario IS NULL OR LOWER(u.email) LIKE LOWER(CONCAT('%', :usuario, '%'))
+                 OR LOWER(COALESCE(u.nombres, '') || ' ' || COALESCE(u.apellidos, '')) LIKE LOWER(CONCAT('%', :usuario, '%')))
+            ORDER BY i.fecha_generacion DESC
+            """, nativeQuery = true)
+    List<InferenciaReceta> listarDescartadasSeguridad(
+            @Param("desde") LocalDateTime desde,
+            @Param("hasta") LocalDateTime hasta,
+            @Param("usuario") String usuario,
+            @Param("componente") String componente
+    );
+
+    @Query(value = """
+            SELECT to_char(fecha_generacion, 'YYYY-MM') AS mes, COUNT(*) AS total
+            FROM inferencias_recetas
+            WHERE estado = 'descartada_seguridad'
+            GROUP BY to_char(fecha_generacion, 'YYYY-MM')
+            ORDER BY mes DESC
+            LIMIT 12
+            """, nativeQuery = true)
+    List<Object[]> contarDescartadasPorMesRaw();
+
+    @Query(value = """
+            SELECT i.usuario_id, CAST(i.fecha_generacion AS date) AS dia, COUNT(*) AS total
+            FROM inferencias_recetas i
+            WHERE i.estado = 'descartada_seguridad'
+            GROUP BY i.usuario_id, CAST(i.fecha_generacion AS date)
+            HAVING COUNT(*) > 5
+            """, nativeQuery = true)
+    List<Object[]> usuariosConAlertaDescartadasDia();
 }

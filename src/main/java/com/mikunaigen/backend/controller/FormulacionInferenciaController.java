@@ -36,7 +36,12 @@ public class FormulacionInferenciaController {
 
     @GetMapping("/preparacion")
     public ResponseEntity<Map<String, Object>> preparacion() {
-        return ResponseEntity.ok(inferenciaService.preparacion(usuarioId()));
+        return ResponseEntity.ok(inferenciaService.preparacion(usuarioIdSinDescargo()));
+    }
+
+    @PostMapping("/descargo/aceptar")
+    public ResponseEntity<Map<String, Object>> aceptarDescargo() {
+        return ResponseEntity.ok(inferenciaService.aceptarDescargo(usuarioIdSinDescargo()));
     }
 
     @PostMapping("/ejecutar")
@@ -99,6 +104,19 @@ public class FormulacionInferenciaController {
         }
     }
 
+    @GetMapping("/receta/{id}/calificacion")
+    public ResponseEntity<Map<String, Object>> estadoCalificacion(@PathVariable UUID id) {
+        return ResponseEntity.ok(inferenciaService.estadoCalificacion(usuarioId(), id));
+    }
+
+    @PostMapping("/receta/{id}/calificacion")
+    public ResponseEntity<Map<String, Object>> calificarReceta(
+            @PathVariable UUID id,
+            @RequestBody Map<String, Object> body
+    ) {
+        return ResponseEntity.ok(inferenciaService.calificarReceta(usuarioId(), id, body));
+    }
+
     @GetMapping("/receta/{id}/exportar")
     public ResponseEntity<byte[]> exportar(
             @PathVariable UUID id,
@@ -117,6 +135,11 @@ public class FormulacionInferenciaController {
     }
 
     private UUID usuarioId() {
+        verificarUsuarioFormulacion();
+        return cargarUsuario().getId();
+    }
+
+    private UUID usuarioIdSinDescargo() {
         verificarUsuarioFormulacion();
         return cargarUsuario().getId();
     }
