@@ -153,6 +153,7 @@ public class PerfilController {
         out.put("email", user.getEmail());
         out.put("role", user.getRole() == null ? null : user.getRole().getName());
         out.put("modoOscuro", user.isModoOscuro());
+        out.put("mfaEnabled", user.isMfaEnabled());
         solicitudCambioRolRepository.findFirstByUsuarioIdAndEstadoIgnoreCase(user.getId(), "pendiente")
                 .ifPresent(s -> {
                     out.put("solicitudPlanEnRevision", true);

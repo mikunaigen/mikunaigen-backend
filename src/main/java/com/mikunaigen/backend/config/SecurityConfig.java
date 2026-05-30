@@ -73,6 +73,7 @@ public class SecurityConfig {
                         "/api/auth/confirmar-empleado",
                         "/api/auth/enviar-codigo-recuperacion",
                         "/api/auth/reset-password",
+                        "/api/auth/mfa/verificar-login",
                         "/api/auth/ip-status",
                         "/api/configuracion/**",
                         "/api/estado_bases_datos",

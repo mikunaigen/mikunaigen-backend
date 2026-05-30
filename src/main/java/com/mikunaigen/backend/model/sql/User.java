@@ -67,6 +67,12 @@ public class User {
     @Column(name = "modo_oscuro", nullable = false)
     private boolean modoOscuro = false;
 
+    @Column(name = "mfa_enabled", nullable = false)
+    private boolean mfaEnabled = false;
+
+    @Column(name = "mfa_secret", columnDefinition = "TEXT")
+    private String mfaSecret;
+
     @Column(name = "fecha_registro")
     private LocalDateTime fechaRegistro = LocalDateTime.now();
 

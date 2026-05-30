@@ -39,6 +39,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String token = authHeader.substring(7);
         try {
             Claims claims = jwtService.parseClaims(token);
+            if (jwtService.esTokenMfaPendiente(claims)) {
+                filterChain.doFilter(request, response);
+                return;
+            }
             String email = claims.getSubject();
             String role = String.valueOf(claims.getOrDefault("role", ""));
             if (email != null && !email.isBlank() && SecurityContextHolder.getContext().getAuthentication() == null) {

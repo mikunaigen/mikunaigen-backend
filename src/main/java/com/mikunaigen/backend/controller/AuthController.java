@@ -7,7 +7,9 @@ import com.mikunaigen.backend.security.JwtService;
 import com.mikunaigen.backend.model.sql.ConfiguracionGlobal;
 import com.mikunaigen.backend.repository.sql.ConfiguracionGlobalRepository;
 import com.mikunaigen.backend.exception.EmailDispatchException;
+import com.mikunaigen.backend.service.MfaService;
 import com.mikunaigen.backend.service.RegistroTelegramService;
+import io.jsonwebtoken.Claims;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -33,6 +35,7 @@ public class AuthController {
     @Autowired private PasswordEncoder passwordEncoder;
     @Autowired private JwtService jwtService;
     @Autowired private RegistroTelegramService registroTelegramService;
+    @Autowired private MfaService mfaService;
 
     private static final int MAX_INTENTOS_FALLIDOS = 3;
     private static final long BLOQUEO_MINUTOS = 60;
@@ -61,7 +64,7 @@ public class AuthController {
     public ResponseEntity<?> registrarAdmin(@RequestBody Map<String, String> data) {
         if (userRepo.count() > 0) {
             return ResponseEntity.badRequest().body(Map.of(
-                    "message", "El administrador inicial ya fue registrado. Usa inicio de sesión."));
+                    "message", "El administrador inicial ya fue registrado. Usa inicio de sesi?n."));
         }
         return registroTelegramService.registrarPendiente(data);
     }
@@ -71,7 +74,7 @@ public class AuthController {
         try {
             return ResponseEntity.ok(registroTelegramService.estadoActivacion(UUID.fromString(userId)));
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(Map.of("message", "Identificador de usuario inválido."));
+            return ResponseEntity.badRequest().body(Map.of("message", "Identificador de usuario inv?lido."));
         }
     }
 
@@ -80,7 +83,7 @@ public class AuthController {
         try {
             return registroTelegramService.renovarCodigoActivacion(UUID.fromString(userId));
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(Map.of("message", "Identificador de usuario inválido."));
+            return ResponseEntity.badRequest().body(Map.of("message", "Identificador de usuario inv?lido."));
         }
     }
 
@@ -89,7 +92,7 @@ public class AuthController {
         try {
             return registroTelegramService.cancelarRegistroPendiente(UUID.fromString(userId));
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(Map.of("message", "Identificador de usuario inválido."));
+            return ResponseEntity.badRequest().body(Map.of("message", "Identificador de usuario inv?lido."));
         }
     }
 
@@ -98,7 +101,7 @@ public class AuthController {
         String bot = registroTelegramService.getBotUsername();
         if (bot.isBlank()) {
             return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-                    .body(Map.of("message", "El bot de Telegram no está configurado."));
+                    .body(Map.of("message", "El bot de Telegram no est? configurado."));
         }
         return ResponseEntity.ok(Map.of("telegramBotUsername", bot));
     }
@@ -121,7 +124,7 @@ public class AuthController {
         if (estaBloqueada(intentoIp)) {
             registrarAuditoriaLogin(emailAudit, ip, userAgent, "BLOCKED", "IP bloqueada temporalmente");
             return ResponseEntity.status(HttpStatus.LOCKED).body(Map.of(
-                    "message", "Tu IP está bloqueada temporalmente por múltiples intentos fallidos.",
+                    "message", "Tu IP est? bloqueada temporalmente por m?ltiples intentos fallidos.",
                     "ipAddress", ip,
                     "remainingSeconds", segundosRestantes(intentoIp.getBlockedUntil()),
                     "blocked", true
@@ -131,18 +134,18 @@ public class AuthController {
         User user = userRepo.findByEmail(email).orElse(null);
         if (user == null) {
             registrarAuditoriaLogin(emailAudit, ip, userAgent, "FAILED", "Correo no existe");
-            return ResponseEntity.status(401).body(Map.of("message", "El correo electrónico no existe."));
+            return ResponseEntity.status(401).body(Map.of("message", "El correo electr?nico no existe."));
         }
         if (user.isDeleted()) {
             registrarAuditoriaLogin(emailAudit, ip, userAgent, "FAILED", "Cuenta suspendida");
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
-                    "message", "Tu cuenta está suspendida. Contacta al administrador de la plataforma."));
+                    "message", "Tu cuenta est? suspendida. Contacta al administrador de la plataforma."));
         }
 
         if ("pendiente".equalsIgnoreCase(user.getEstado())) {
-            registrarAuditoriaLogin(emailAudit, ip, userAgent, "FAILED", "Cuenta pendiente de activación");
+            registrarAuditoriaLogin(emailAudit, ip, userAgent, "FAILED", "Cuenta pendiente de activaci?n");
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
-                    "message", "Tu cuenta está pendiente de activación. Completa la verificación con Telegram."));
+                    "message", "Tu cuenta est? pendiente de activaci?n. Completa la verificaci?n con Telegram."));
         }
 
         if (user.isFirstLogin()) {
@@ -181,9 +184,9 @@ public class AuthController {
             }
 
             ipLoginAttemptRepo.save(intentoIp);
-            registrarAuditoriaLogin(user.getEmail(), ip, userAgent, "FAILED", "Contraseña incorrecta");
+            registrarAuditoriaLogin(user.getEmail(), ip, userAgent, "FAILED", "Contrase?a incorrecta");
             return ResponseEntity.status(401).body(Map.of(
-                    "message", "Contraseña incorrecta.",
+                    "message", "Contrase?a incorrecta.",
                     "failedAttempts", fallidos,
                     "remainingAttempts", MAX_INTENTOS_FALLIDOS - fallidos,
                     "blocked", false
@@ -196,6 +199,101 @@ public class AuthController {
         ipLoginAttemptRepo.save(intentoIp);
         registrarAuditoriaLogin(user.getEmail(), ip, userAgent, "SUCCESS", null);
 
+        if (mfaService.requiereMfa(user)) {
+            String mfaToken = jwtService.generateMfaPendingToken(user.getEmail(), user.getId().toString());
+            Map<String, Object> mfaBody = new LinkedHashMap<>();
+            mfaBody.put("mfaRequired", true);
+            mfaBody.put("mfaToken", mfaToken);
+            mfaBody.put("email", user.getEmail());
+            return ResponseEntity.ok(mfaBody);
+        }
+
+        return ResponseEntity.ok(construirRespuestaSesion(user));
+    }
+
+    @PostMapping("/mfa/verificar-login")
+    public ResponseEntity<?> verificarLoginMfa(
+            @RequestBody Map<String, String> body,
+            HttpServletRequest request
+    ) {
+        String mfaToken = body != null ? body.get("mfaToken") : null;
+        String codigo = body != null ? body.get("code") : null;
+        String codigoRespaldo = body != null ? body.get("backupCode") : null;
+        String ip = obtenerIpCliente(request);
+        String userAgent = request.getHeader("User-Agent");
+
+        if (mfaToken == null || mfaToken.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Token MFA requerido."));
+        }
+
+        Claims claims;
+        try {
+            claims = jwtService.parseClaims(mfaToken);
+        } catch (Exception e) {
+            return ResponseEntity.status(401).body(Map.of("message", "Sesi?n MFA expirada. Vuelve a iniciar sesi?n."));
+        }
+        if (!jwtService.esTokenMfaPendiente(claims)) {
+            return ResponseEntity.status(401).body(Map.of("message", "Token MFA inv?lido."));
+        }
+
+        String email = claims.getSubject();
+        String userIdStr = String.valueOf(claims.getOrDefault("userId", ""));
+        User user = userRepo.findByEmail(email).orElse(null);
+        if (user == null || user.isDeleted() || !user.getId().toString().equals(userIdStr)) {
+            return ResponseEntity.status(401).body(Map.of("message", "Usuario no v?lido."));
+        }
+        if (!mfaService.requiereMfa(user)) {
+            return ResponseEntity.ok(construirRespuestaSesion(user));
+        }
+
+        boolean codigoValido = false;
+        if (codigo != null && !codigo.isBlank()) {
+            codigoValido = mfaService.verificarCodigoIngreso(user, codigo);
+        } else if (codigoRespaldo != null && !codigoRespaldo.isBlank()) {
+            codigoValido = mfaService.verificarCodigoRespaldo(user, codigoRespaldo);
+        }
+
+        if (!codigoValido) {
+            IpLoginAttempt intentoIp = ipLoginAttemptRepo.findByIpAddress(ip).orElseGet(() -> {
+                IpLoginAttempt nuevo = new IpLoginAttempt();
+                nuevo.setIpAddress(ip);
+                return nuevo;
+            });
+            limpiarBloqueoExpirado(intentoIp);
+            int fallidos = (intentoIp.getFailedAttempts() == null ? 0 : intentoIp.getFailedAttempts()) + 1;
+            intentoIp.setFailedAttempts(fallidos);
+            intentoIp.setLastFailedAt(LocalDateTime.now());
+            if (fallidos >= MAX_INTENTOS_FALLIDOS) {
+                LocalDateTime bloqueadoHasta = LocalDateTime.now().plusMinutes(BLOQUEO_MINUTOS);
+                intentoIp.setBlockedUntil(bloqueadoHasta);
+                ipLoginAttemptRepo.save(intentoIp);
+                registrarAuditoriaLogin(user.getEmail(), ip, userAgent, "BLOCKED", "MFA inv?lido");
+                return ResponseEntity.status(HttpStatus.LOCKED).body(Map.of(
+                        "message", "Tu IP ha sido restringida por 1 hora por varios intentos fallidos.",
+                        "blocked", true
+                ));
+            }
+            ipLoginAttemptRepo.save(intentoIp);
+            registrarAuditoriaLogin(user.getEmail(), ip, userAgent, "FAILED", "C?digo MFA incorrecto");
+            return ResponseEntity.status(401).body(Map.of(
+                    "message", "El c?digo ingresado no es v?lido o ha expirado.",
+                    "failedAttempts", fallidos,
+                    "remainingAttempts", MAX_INTENTOS_FALLIDOS - fallidos
+            ));
+        }
+
+        IpLoginAttempt intentoIp = ipLoginAttemptRepo.findByIpAddress(ip).orElse(null);
+        if (intentoIp != null) {
+            intentoIp.setFailedAttempts(0);
+            intentoIp.setLastFailedAt(null);
+            intentoIp.setBlockedUntil(null);
+            ipLoginAttemptRepo.save(intentoIp);
+        }
+        registrarAuditoriaLogin(user.getEmail(), ip, userAgent, "SUCCESS", "MFA OK");
+        return ResponseEntity.ok(construirRespuestaSesion(user));
+    }
+
+    private Map<String, Object> construirRespuestaSesion(User user) {
         String token = jwtService.generateToken(
                 user.getEmail(),
                 user.getId().toString(),
@@ -209,7 +307,7 @@ public class AuthController {
         body.put("firstLogin", false);
         body.put("darkMode", user.isDarkMode());
         body.put("userId", user.getId().toString());
-        return ResponseEntity.ok(body);
+        return body;
     }
 
     @PatchMapping("/dark-mode")
@@ -265,10 +363,10 @@ public class AuthController {
         User user = userRepo.findByEmail(email).orElse(null);
         
         if (user == null || !user.isFirstLogin()) 
-            return ResponseEntity.badRequest().body(Map.of("message", "Acción no permitida para este usuario."));
+            return ResponseEntity.badRequest().body(Map.of("message", "Acci?n no permitida para este usuario."));
         
         ConfiguracionGlobal config = configRepo.findById(1).orElse(null);
-        if (config == null) return ResponseEntity.internalServerError().body(Map.of("message", "El sistema no está configurado."));
+        if (config == null) return ResponseEntity.internalServerError().body(Map.of("message", "El sistema no est? configurado."));
 
         return generarYEnviarCodigo(email, config, EmailService.TipoCodigoCorreo.ACTIVACION_EMPLEADO);
     }
@@ -281,11 +379,11 @@ public class AuthController {
 
         VerificationCode vCode = codeRepo.findFirstByEmailAndUsedOrderByExpirationTimeDesc(email, false).orElse(null);
         
-        if (vCode == null || !vCode.getCode().equals(codeIn)) return ResponseEntity.badRequest().body(Map.of("message", "Código incorrecto."));
-        if (LocalDateTime.now().isAfter(vCode.getExpirationTime())) return ResponseEntity.badRequest().body(Map.of("message", "Código expirado."));
+        if (vCode == null || !vCode.getCode().equals(codeIn)) return ResponseEntity.badRequest().body(Map.of("message", "C?digo incorrecto."));
+        if (LocalDateTime.now().isAfter(vCode.getExpirationTime())) return ResponseEntity.badRequest().body(Map.of("message", "C?digo expirado."));
 
-        if (!password.matches("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@!¡¿?#$%/&])[A-Za-z\\d@!¡¿?#$%/&]{8,}$")) 
-            return ResponseEntity.badRequest().body(Map.of("message", "La contraseña es débil."));
+        if (!password.matches("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@!???#$%/&])[A-Za-z\\d@!???#$%/&]{8,}$")) 
+            return ResponseEntity.badRequest().body(Map.of("message", "La contrase?a es d?bil."));
 
         User user = userRepo.findByEmail(email).orElse(null);
         if (user == null) return ResponseEntity.badRequest().body(Map.of("message", "Usuario no encontrado."));
@@ -297,7 +395,7 @@ public class AuthController {
         vCode.setUsed(true);
         codeRepo.save(vCode);
 
-        return ResponseEntity.ok(Map.of("message", "Cuenta activada con éxito. Ya puedes ingresar."));
+        return ResponseEntity.ok(Map.of("message", "Cuenta activada con ?xito. Ya puedes ingresar."));
     }
 
     @PostMapping("/enviar-codigo-recuperacion")
@@ -306,7 +404,7 @@ public class AuthController {
         if (!userRepo.existsByEmail(email)) return ResponseEntity.badRequest().body(Map.of("message", "Correo no registrado."));
         
         ConfiguracionGlobal config = configRepo.findById(1).orElse(null);
-        if (config == null) return ResponseEntity.internalServerError().body(Map.of("message", "El sistema no está configurado."));
+        if (config == null) return ResponseEntity.internalServerError().body(Map.of("message", "El sistema no est? configurado."));
 
         return generarYEnviarCodigo(email, config, EmailService.TipoCodigoCorreo.RECUPERACION_PASSWORD);
     }
@@ -318,9 +416,9 @@ public class AuthController {
         String newPassword = data.get("newPassword");
 
         VerificationCode vCode = codeRepo.findFirstByEmailAndUsedOrderByExpirationTimeDesc(email, false).orElse(null);
-        if (vCode == null || !vCode.getCode().equals(codeIn)) return ResponseEntity.badRequest().body(Map.of("message", "Código incorrecto."));
-        if (LocalDateTime.now().isAfter(vCode.getExpirationTime())) return ResponseEntity.badRequest().body(Map.of("message", "El código ha expirado."));
-        if (!newPassword.matches("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@!¡¿?#$%/&])[A-Za-z\\d@!¡¿?#$%/&]{8,}$")) return ResponseEntity.badRequest().body(Map.of("message", "La contraseña no cumple los requisitos de seguridad."));
+        if (vCode == null || !vCode.getCode().equals(codeIn)) return ResponseEntity.badRequest().body(Map.of("message", "C?digo incorrecto."));
+        if (LocalDateTime.now().isAfter(vCode.getExpirationTime())) return ResponseEntity.badRequest().body(Map.of("message", "El c?digo ha expirado."));
+        if (!newPassword.matches("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@!???#$%/&])[A-Za-z\\d@!???#$%/&]{8,}$")) return ResponseEntity.badRequest().body(Map.of("message", "La contrase?a no cumple los requisitos de seguridad."));
 
         User user = userRepo.findByEmail(email).orElse(null);
         if (user == null) return ResponseEntity.badRequest().body(Map.of("message", "Usuario no encontrado."));
@@ -330,7 +428,7 @@ public class AuthController {
         vCode.setUsed(true);
         codeRepo.save(vCode);
 
-        return ResponseEntity.ok(Map.of("message", "Contraseña actualizada exitosamente."));
+        return ResponseEntity.ok(Map.of("message", "Contrase?a actualizada exitosamente."));
     }
 
     private ResponseEntity<?> generarYEnviarCodigo(
@@ -356,7 +454,7 @@ public class AuthController {
                     config.getNombrePlataforma(),
                     null
             );
-            return ResponseEntity.ok(Map.of("message", "Código enviado al correo."));
+            return ResponseEntity.ok(Map.of("message", "C?digo enviado al correo."));
         } catch (EmailDispatchException e) {
             return ResponseEntity.internalServerError().body(Map.of(
                     "message",
@@ -392,13 +490,13 @@ public class AuthController {
 
     private ResponseEntity<?> validarDuplicadosUsuario(String email, String dni, String phone, String fullName) {
         if (userRepo.existsByEmailIgnoreCase(email)) {
-            return ResponseEntity.badRequest().body(Map.of("message", "Ya existe un usuario con ese correo electrónico."));
+            return ResponseEntity.badRequest().body(Map.of("message", "Ya existe un usuario con ese correo electr?nico."));
         }
         if (userRepo.existsByDni(dni)) {
             return ResponseEntity.badRequest().body(Map.of("message", "Ya existe un usuario con ese DNI."));
         }
         if (userRepo.existsByPhone(phone)) {
-            return ResponseEntity.badRequest().body(Map.of("message", "Ya existe un usuario con ese número de teléfono."));
+            return ResponseEntity.badRequest().body(Map.of("message", "Ya existe un usuario con ese n?mero de tel?fono."));
         }
         if (existeNombreCompletoDuplicado(fullName)) {
             return ResponseEntity.badRequest().body(Map.of("message", "Ya existe un usuario con el mismo nombre y apellidos."));
@@ -408,13 +506,13 @@ public class AuthController {
 
     private ResponseEntity<?> validarDuplicadosPrevioCodigo(String email, String dni, String phone, String fullName) {
         if (userRepo.existsByEmailIgnoreCase(email)) {
-            return ResponseEntity.badRequest().body(Map.of("message", "Ya existe un usuario con ese correo electrónico."));
+            return ResponseEntity.badRequest().body(Map.of("message", "Ya existe un usuario con ese correo electr?nico."));
         }
         if (dni != null && userRepo.existsByDni(dni)) {
             return ResponseEntity.badRequest().body(Map.of("message", "Ya existe un usuario con ese DNI."));
         }
         if (phone != null && userRepo.existsByPhone(phone)) {
-            return ResponseEntity.badRequest().body(Map.of("message", "Ya existe un usuario con ese número de teléfono."));
+            return ResponseEntity.badRequest().body(Map.of("message", "Ya existe un usuario con ese n?mero de tel?fono."));
         }
         if (fullName != null && existeNombreCompletoDuplicado(fullName)) {
             return ResponseEntity.badRequest().body(Map.of("message", "Ya existe un usuario con el mismo nombre y apellidos."));
