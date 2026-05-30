@@ -47,17 +47,17 @@ public class AdminBackupController {
     }
 
     @PostMapping("/restore-pair")
-    public ResponseEntity<Map<String, Object>> restorePair(@RequestBody Map<String, Object> body) {
-        String pgKey = body != null && body.get("postgresKey") != null ? String.valueOf(body.get("postgresKey")) : null;
-        String mgKey = body != null && body.get("mongoKey") != null ? String.valueOf(body.get("mongoKey")) : null;
-        boolean notify = body != null && Boolean.TRUE.equals(body.get("notifyWhenDone"));
-        String notifyEmail = body != null && body.get("notifyEmail") != null ? String.valueOf(body.get("notifyEmail")) : null;
-        String key = pgKey != null && !pgKey.isBlank() ? pgKey : mgKey;
-        if (key == null || key.isBlank()) {
+    public ResponseEntity<Map<String, Object>> restaurarRespaldo(@RequestBody Map<String, Object> body) {
+        String clave = body != null && body.get("postgresKey") != null ? String.valueOf(body.get("postgresKey")) : null;
+        boolean notificar = body != null && Boolean.TRUE.equals(body.get("notifyWhenDone"));
+        String correoNotificacion = body != null && body.get("notifyEmail") != null
+                ? String.valueOf(body.get("notifyEmail"))
+                : null;
+        if (clave == null || clave.isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("ok", false, "message", "Key de respaldo requerida."));
         }
-        maintenanceModeService.startRestore(notify, notifyEmail, Set.of("postgresql"));
-        backupService.restore("postgresql", key);
+        maintenanceModeService.startRestore(notificar, correoNotificacion, Set.of("postgresql"));
+        backupService.restore("postgresql", clave);
         return ResponseEntity.ok(Map.of("ok", true));
     }
 
@@ -78,12 +78,11 @@ public class AdminBackupController {
     }
 
     @PostMapping("/generate-pair")
-    public ResponseEntity<Map<String, Object>> generatePair() {
-        Map<String, String> keys = backupService.generatePairedBackupKeys();
+    public ResponseEntity<Map<String, Object>> generarRespaldo() {
+        Map<String, String> claves = backupService.generatePairedBackupKeys();
         return ResponseEntity.ok(Map.of(
                 "ok", true,
-                "postgresKey", keys.get("postgresKey"),
-                "mongoKey", keys.get("mongoKey")
+                "postgresKey", claves.get("postgresKey")
         ));
     }
 }

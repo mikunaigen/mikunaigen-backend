@@ -26,7 +26,8 @@ public class BackupWebhookController {
         String status = body != null && body.get("status") != null ? String.valueOf(body.get("status")) : "unknown";
         String op = body != null && body.get("operation") != null ? String.valueOf(body.get("operation")) : "";
         String db = body != null && body.get("db_type") != null ? String.valueOf(body.get("db_type")) : "";
-        backupAutomatizacionService.recordWorkflowResult(status, op + " " + db);
+        String extra = (op != null && !op.isBlank() ? "op=" + op + " " : "") + (db != null && !db.isBlank() ? "db=" + db : "");
+        backupAutomatizacionService.recordWorkflowResult(status, extra.trim());
         return ResponseEntity.ok(Map.of("ok", true));
     }
 
