@@ -4,6 +4,7 @@ import com.mikunaigen.backend.model.sql.ConfiguracionGlobal;
 import com.mikunaigen.backend.repository.sql.ConfiguracionGlobalRepository;
 import com.mikunaigen.backend.service.EmailService;
 import com.mikunaigen.backend.service.MaintenanceModeService;
+import com.mikunaigen.backend.service.AuditoriaRestauracionService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -18,15 +19,18 @@ public class MaintenanceWebhookController {
     private final MaintenanceModeService maintenanceModeService;
     private final ConfiguracionGlobalRepository configRepository;
     private final EmailService emailService;
+    private final AuditoriaRestauracionService auditoriaRestauracionService;
 
     public MaintenanceWebhookController(
             MaintenanceModeService maintenanceModeService,
             ConfiguracionGlobalRepository configRepository,
-            EmailService emailService
+            EmailService emailService,
+            AuditoriaRestauracionService auditoriaRestauracionService
     ) {
         this.maintenanceModeService = maintenanceModeService;
         this.configRepository = configRepository;
         this.emailService = emailService;
+        this.auditoriaRestauracionService = auditoriaRestauracionService;
     }
 
     @PostMapping("/maintenance-end")
@@ -42,6 +46,11 @@ public class MaintenanceWebhookController {
         String status = body != null && body.get("status") != null ? String.valueOf(body.get("status")) : "unknown";
         if ("restore".equalsIgnoreCase(op)) {
             maintenanceModeService.markRestoreDone(db);
+            if ("success".equalsIgnoreCase(status) || "ok".equalsIgnoreCase(status)) {
+                auditoriaRestauracionService.marcarExitosa(maintenanceModeService.restauracionAuditoriaId());
+            } else if ("failed".equalsIgnoreCase(status) || "error".equalsIgnoreCase(status)) {
+                auditoriaRestauracionService.marcarFallida(maintenanceModeService.restauracionAuditoriaId());
+            }
         }
         if (!maintenanceModeService.isMaintenance()) {
             return ResponseEntity.ok(Map.of("ok", true));

@@ -5,10 +5,15 @@ import com.mikunaigen.backend.service.IaModelosService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
+
+import com.mikunaigen.backend.model.sql.User;
+import com.mikunaigen.backend.repository.sql.UserRepository;
 
 import java.io.IOException;
 import java.util.Map;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/ia-modelos")
@@ -16,10 +21,16 @@ public class IaModelosController {
 
     private final IaModelosService iaModelosService;
     private final EntrenamientoIaService entrenamientoIaService;
+    private final UserRepository userRepository;
 
-    public IaModelosController(IaModelosService iaModelosService, EntrenamientoIaService entrenamientoIaService) {
+    public IaModelosController(
+            IaModelosService iaModelosService,
+            EntrenamientoIaService entrenamientoIaService,
+            UserRepository userRepository
+    ) {
         this.iaModelosService = iaModelosService;
         this.entrenamientoIaService = entrenamientoIaService;
+        this.userRepository = userRepository;
     }
 
     @GetMapping("/estado")
@@ -106,10 +117,24 @@ public class IaModelosController {
     @PreAuthorize("hasRole('administrador')")
     public ResponseEntity<?> iniciarEntrenamiento() {
         try {
-            return ResponseEntity.ok(entrenamientoIaService.iniciarEntrenamiento());
+            return ResponseEntity.ok(entrenamientoIaService.iniciarEntrenamiento(obtenerAdminId()));
         } catch (IllegalStateException e) {
             return ResponseEntity.status(409).body(Map.of("message", e.getMessage()));
         }
+    }
+
+    private UUID obtenerAdminId() {
+        Object principal = SecurityContextHolder.getContext().getAuthentication() == null
+                ? null
+                : SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        if (!(principal instanceof String email) || email.isBlank()) {
+            throw new IllegalStateException("Administrador no autenticado.");
+        }
+        User user = userRepository.findByEmail(email).orElse(null);
+        if (user == null || user.getId() == null) {
+            throw new IllegalStateException("Administrador no autenticado.");
+        }
+        return user.getId();
     }
 
     @GetMapping("/entrenamiento/estado")

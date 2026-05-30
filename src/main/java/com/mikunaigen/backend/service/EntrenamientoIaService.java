@@ -31,6 +31,9 @@ public class EntrenamientoIaService {
     private final EntrenamientoIaAsyncService asyncService;
     private final EntrenamientoIaPushService push;
     private final ObjectMapper objectMapper;
+    private final AuditoriaEntrenamientoIaService auditoriaEntrenamientoIaService;
+
+    private volatile UUID administradorEntrenamientoActivo;
 
     @Value("${app.kaggle.webhook.secret:}")
     private String webhookSecret;
@@ -43,17 +46,20 @@ public class EntrenamientoIaService {
             EntrenamientoDatasetGithubService datasetGithub,
             EntrenamientoIaAsyncService asyncService,
             EntrenamientoIaPushService push,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            AuditoriaEntrenamientoIaService auditoriaEntrenamientoIaService
     ) {
         this.repo = repo;
         this.datasetGithub = datasetGithub;
         this.asyncService = asyncService;
         this.push = push;
         this.objectMapper = objectMapper;
+        this.auditoriaEntrenamientoIaService = auditoriaEntrenamientoIaService;
     }
 
     @Transactional
-    public Map<String, Object> iniciarEntrenamiento() {
+    public Map<String, Object> iniciarEntrenamiento(UUID administradorId) {
+        this.administradorEntrenamientoActivo = administradorId;
         ConfiguracionIa c = getOrCreate();
         if (ESTADOS_OCUPADOS.contains(normalizarEstado(c.getEntrenamientoEstado()))) {
             throw new IllegalStateException("Ya hay un entrenamiento en curso.");
@@ -182,6 +188,10 @@ public class EntrenamientoIaService {
         if ("SUCCESS".equalsIgnoreCase(status)) {
             String modeloKey = str(body.get("modelFileKey"));
             String escaladorKey = str(body.get("scalerFileKey"));
+            if (administradorEntrenamientoActivo != null) {
+                auditoriaEntrenamientoIaService.registrarDespliegueProduccion(
+                        administradorEntrenamientoActivo, c, body);
+            }
             if (!modeloKey.isBlank()) {
                 c.setFormulacionModeloB2Key(modeloKey);
             }

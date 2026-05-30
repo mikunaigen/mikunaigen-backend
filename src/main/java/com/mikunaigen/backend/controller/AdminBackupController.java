@@ -1,15 +1,20 @@
 package com.mikunaigen.backend.controller;
 
 import com.mikunaigen.backend.dto.BackupItemDto;
+import com.mikunaigen.backend.model.sql.User;
+import com.mikunaigen.backend.repository.sql.UserRepository;
+import com.mikunaigen.backend.service.AuditoriaRestauracionService;
 import com.mikunaigen.backend.service.BackupAutomatizacionService;
 import com.mikunaigen.backend.service.BackupService;
 import com.mikunaigen.backend.service.MaintenanceModeService;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/admin/backups")
@@ -18,15 +23,21 @@ public class AdminBackupController {
     private final BackupService backupService;
     private final BackupAutomatizacionService backupAutomatizacionService;
     private final MaintenanceModeService maintenanceModeService;
+    private final AuditoriaRestauracionService auditoriaRestauracionService;
+    private final UserRepository userRepository;
 
     public AdminBackupController(
             BackupService backupService,
             BackupAutomatizacionService backupAutomatizacionService,
-            MaintenanceModeService maintenanceModeService
+            MaintenanceModeService maintenanceModeService,
+            AuditoriaRestauracionService auditoriaRestauracionService,
+            UserRepository userRepository
     ) {
         this.backupService = backupService;
         this.backupAutomatizacionService = backupAutomatizacionService;
         this.maintenanceModeService = maintenanceModeService;
+        this.auditoriaRestauracionService = auditoriaRestauracionService;
+        this.userRepository = userRepository;
     }
 
     @GetMapping("/list")
@@ -56,6 +67,9 @@ public class AdminBackupController {
         if (clave == null || clave.isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("ok", false, "message", "Key de respaldo requerida."));
         }
+        UUID adminId = obtenerAdminId();
+        Integer auditoriaId = auditoriaRestauracionService.iniciarRestauracion(adminId, clave);
+        maintenanceModeService.setRestauracionAuditoriaId(auditoriaId);
         maintenanceModeService.startRestore(notificar, correoNotificacion, Set.of("postgresql"));
         backupService.restore("postgresql", clave);
         return ResponseEntity.ok(Map.of("ok", true));
@@ -85,5 +99,18 @@ public class AdminBackupController {
                 "postgresKey", claves.get("postgresKey")
         ));
     }
-}
 
+    private UUID obtenerAdminId() {
+        Object principal = SecurityContextHolder.getContext().getAuthentication() == null
+                ? null
+                : SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        if (!(principal instanceof String email) || email.isBlank()) {
+            throw new IllegalStateException("Administrador no autenticado.");
+        }
+        User user = userRepository.findByEmail(email).orElse(null);
+        if (user == null || user.getId() == null) {
+            throw new IllegalStateException("Administrador no autenticado.");
+        }
+        return user.getId();
+    }
+}

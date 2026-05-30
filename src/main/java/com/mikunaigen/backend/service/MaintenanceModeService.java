@@ -19,6 +19,7 @@ public class MaintenanceModeService {
     private volatile boolean notifyAdmin;
     private volatile String notifyEmail;
     private volatile Instant startedAt;
+    private volatile Integer restauracionAuditoriaId;
 
     @Value("${app.maintenance.secret:}")
     private String maintenanceSecret;
@@ -71,8 +72,17 @@ public class MaintenanceModeService {
 
     public void endMaintenance() {
         pendingRestoreDbs.clear();
+        restauracionAuditoriaId = null;
         maintenance.set(false);
         messagingTemplate.convertAndSend("/topic/system", "MAINTENANCE_END");
+    }
+
+    public void setRestauracionAuditoriaId(Integer restauracionAuditoriaId) {
+        this.restauracionAuditoriaId = restauracionAuditoriaId;
+    }
+
+    public Integer restauracionAuditoriaId() {
+        return restauracionAuditoriaId;
     }
 }
 

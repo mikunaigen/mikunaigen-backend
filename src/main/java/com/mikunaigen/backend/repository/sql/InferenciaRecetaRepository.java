@@ -100,4 +100,35 @@ public interface InferenciaRecetaRepository extends JpaRepository<InferenciaRece
             HAVING COUNT(*) > 5
             """, nativeQuery = true)
     List<Object[]> usuariosConAlertaDescartadasDia();
+
+    @Query("""
+            SELECT COUNT(i) FROM InferenciaReceta i
+            WHERE i.estado = 'guardada_historial'
+            AND i.fechaGeneracion >= :desde AND i.fechaGeneracion <= :hasta
+            """)
+    long contarGuardadasHistorialEntre(
+            @Param("desde") LocalDateTime desde,
+            @Param("hasta") LocalDateTime hasta);
+
+    @Query("SELECT COUNT(i) FROM InferenciaReceta i WHERE i.estado = 'guardada_historial'")
+    long contarTotalGuardadasHistorial();
+
+    @Query("""
+            SELECT COUNT(i) FROM InferenciaReceta i
+            WHERE i.fechaGeneracion >= :desde AND i.fechaGeneracion <= :hasta
+            """)
+    long contarInferenciasEntre(
+            @Param("desde") LocalDateTime desde,
+            @Param("hasta") LocalDateTime hasta);
+
+    @Query(value = """
+            SELECT CAST(i.fecha_generacion AS date) AS dia, COUNT(*) AS total
+            FROM inferencias_recetas i
+            WHERE i.fecha_generacion >= :desde AND i.fecha_generacion <= :hasta
+            GROUP BY CAST(i.fecha_generacion AS date)
+            ORDER BY dia
+            """, nativeQuery = true)
+    List<Object[]> contarInferenciasPorDia(
+            @Param("desde") LocalDateTime desde,
+            @Param("hasta") LocalDateTime hasta);
 }

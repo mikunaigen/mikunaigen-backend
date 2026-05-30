@@ -9,6 +9,7 @@ import com.mikunaigen.backend.repository.sql.ConfiguracionGlobalRepository;
 import com.mikunaigen.backend.exception.EmailDispatchException;
 import com.mikunaigen.backend.service.MfaService;
 import com.mikunaigen.backend.service.RegistroTelegramService;
+import com.mikunaigen.backend.service.AuditoriaAccesoService;
 import io.jsonwebtoken.Claims;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -36,6 +37,7 @@ public class AuthController {
     @Autowired private JwtService jwtService;
     @Autowired private RegistroTelegramService registroTelegramService;
     @Autowired private MfaService mfaService;
+    @Autowired private AuditoriaAccesoService auditoriaAccesoService;
 
     private static final int MAX_INTENTOS_FALLIDOS = 3;
     private static final long BLOQUEO_MINUTOS = 60;
@@ -197,7 +199,6 @@ public class AuthController {
         intentoIp.setLastFailedAt(null);
         intentoIp.setBlockedUntil(null);
         ipLoginAttemptRepo.save(intentoIp);
-        registrarAuditoriaLogin(user.getEmail(), ip, userAgent, "SUCCESS", null);
 
         if (mfaService.requiereMfa(user)) {
             String mfaToken = jwtService.generateMfaPendingToken(user.getEmail(), user.getId().toString());
@@ -208,6 +209,7 @@ public class AuthController {
             return ResponseEntity.ok(mfaBody);
         }
 
+        auditoriaAccesoService.registrarAccesoExitoso(user.getId(), ip, userAgent);
         return ResponseEntity.ok(construirRespuestaSesion(user));
     }
 
@@ -289,6 +291,7 @@ public class AuthController {
             intentoIp.setBlockedUntil(null);
             ipLoginAttemptRepo.save(intentoIp);
         }
+        auditoriaAccesoService.registrarAccesoExitoso(user.getId(), ip, userAgent);
         registrarAuditoriaLogin(user.getEmail(), ip, userAgent, "SUCCESS", "MFA OK");
         return ResponseEntity.ok(construirRespuestaSesion(user));
     }
